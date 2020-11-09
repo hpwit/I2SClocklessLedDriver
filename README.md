@@ -10,5 +10,5 @@ I2SClocklessLedDriver driver;
 ```
 
 
-####  `initled(uint8_t *leds,int * Pins,int num_strips,int num_led_per_strip,colorarrangment cArr)`
+ `initled(uint8_t *leds,int * Pins,int num_strips,int num_led_per_strip,colorarrangment cArr)`
 
