@@ -1,4 +1,8 @@
 
+/*
+ 
+ */
+
 #pragma once
 
 #include "esp_heap_caps.h"
@@ -16,11 +20,7 @@
 #include "freertos/semphr.h"
 #include <stdio.h>
 #include <rom/ets_sys.h>
-//#include "Arduino.h"
 
-/*
- To differentiate from RGB, RGBW,RGBWW
- */
 
 #ifndef COLOR_COMPONENT
 #define COLOR_COMPONENT 3
@@ -85,29 +85,12 @@ public:
     I2SClocklessLedDriver(){};
     void setPins( int * Pins)
     {
-        // Serial.printf("nb of serial pin:%d\n",num_strips);
         for (int i = 0; i < num_strips ;i++)
         {
             PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[Pins[i]], PIN_FUNC_GPIO);
             gpio_set_direction((gpio_num_t)Pins[i], (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
-            // pinMode(Pins[i],OUTPUT);
-            //  Serial.println(Pins[i]);
             gpio_matrix_out(Pins[i], deviceBaseIndex[I2S_DEVICE] + i+8, false, false);
-            //This is  to check if the clock
-            
         }
-        // gpio_matrix_out(17, deviceClockIndex[I2S_DEVICE], false, false);
-        //latch pin
-        //PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[LATCH_PIN], PIN_FUNC_GPIO);
-        //gpio_set_direction((gpio_num_t)LATCH_PIN, (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
-        //pinMode(LATCH_PIN,OUTPUT);
-        //gpio_matrix_out(LATCH_PIN, deviceBaseIndex[I2S_DEVICE] + 23, false, false);
-        //if (baseClock > -1)
-        //clock pin
-        //gpio_matrix_out(CLOCK_PIN, deviceClockIndex[I2S_DEVICE], false, false);
-        //    printf("start is2init\n");
-        //i2sInit();
-        //  printf("ofert init\n");
     }
     
     void setBrightness(int brightness)
@@ -121,11 +104,9 @@ public:
             
         }
     }
+
     void i2sInit()
     {
-        
-        
-        
         int interruptSource;
         if (I2S_DEVICE == 0) {
             i2s = &I2S0;
@@ -192,8 +173,6 @@ public:
     
     void initDMABuffers()
     {
-        
-        //Serial.println(num_led_per_strip+2);
         DMABuffersTampon[0] = allocateDMABuffer(COLOR_COMPONENT*8*2*3); //the buffers for the
         DMABuffersTampon[1] = allocateDMABuffer(COLOR_COMPONENT*8*2*3);
         DMABuffersTampon[2] = allocateDMABuffer(COLOR_COMPONENT*8*2*3);
@@ -303,10 +282,7 @@ public:
                 poli+=num_led_per_strip*nb_components;
                 
             }
-            //Serial.println((uint32_t)int_leds);
-            
             ledToDisplay++;
-            //empty((uint16_t*)buff);
             transpose16x1_noinline2(secondPixel[0].bytes,(uint16_t*)DMABuffersTransposed[j+1]->buffer );
             transpose16x1_noinline2(secondPixel[1].bytes,(uint16_t*)DMABuffersTransposed[j+1]->buffer+3*8);
             transpose16x1_noinline2(secondPixel[2].bytes,(uint16_t*)DMABuffersTransposed[j+1]->buffer+2*3*8);
@@ -462,11 +438,7 @@ public:
         dmaBufferCount=2;
         this->leds=leds;
         this->num_led_per_strip=num_led_per_strip;
-        this->num_strips=num_strips;
-        
-        //this->runningPixel=false;
-        
-        
+        this->num_strips=num_strips;    
         this->dmaBufferCount=dmaBufferCount;
         setPins(Pinsq);
         i2sInit();
@@ -479,9 +451,6 @@ private:
     volatile int dmaBufferActive=0;
     volatile bool wait;
     displayMode __displayMode;
-    //  volatile bool stopSignal;
-    
-    // volatile float timmer;
     volatile int ledToDisplay;
     volatile int oo=0;
     uint8_t *leds;
@@ -491,10 +460,7 @@ private:
     volatile  int num_strips;
     volatile  int num_led_per_strip;
     int clock_pin;
-    
     int brigthness;
-
-    
     int p_r,p_g,p_b;
     int i2s_base_pin_index;
     int nb_components;
@@ -713,15 +679,12 @@ private:
     
     void i2sReset()
     {
-        
         const unsigned long lc_conf_reset_flags = I2S_IN_RST_M | I2S_OUT_RST_M | I2S_AHBM_RST_M | I2S_AHBM_FIFO_RST_M;
         (&I2S0)->lc_conf.val |= lc_conf_reset_flags;
         (&I2S0)->lc_conf.val &= ~lc_conf_reset_flags;
-        
         const uint32_t conf_reset_flags = I2S_RX_RESET_M | I2S_RX_FIFO_RESET_M | I2S_TX_RESET_M | I2S_TX_FIFO_RESET_M;
         (&I2S0)->conf.val |= conf_reset_flags;
         (&I2S0)->conf.val &= ~conf_reset_flags;
-        
     }
     
     
