@@ -294,9 +294,9 @@ public:
             uint8_t *poli=leds+ledToDisplay*nb_components;
             for(int i = 0; i < num_strips; i++) {
                 
-                secondPixel[0].bytes[i] = __green_map[*poli+p_g];
-                secondPixel[1].bytes[i] = __red_map[*(poli+p_r)];
-                secondPixel[2].bytes[i] = __blue_map[*(poli+p_b)];
+                secondPixel[p_g].bytes[i] = __green_map[*(poli+1)];
+                secondPixel[p_r].bytes[i] = __red_map[*(poli+0)];
+                secondPixel[p_b].bytes[i] = __blue_map[*(poli+2)];
                 if (nb_components>3)
                     secondPixel[3].bytes[i] = __white_map[*(poli+3)];
                 //#endif
@@ -606,9 +606,9 @@ private:
         uint8_t *poli=ledt+ledtodisp*nbcomponents;
         for(int i = 0; i < num_stripst; i++) {
             
-            secondPixel[0].bytes[i] =mapg[*poli+pg];
-            secondPixel[1].bytes[i] = mapr[*(poli+pr)];
-            secondPixel[2].bytes[i] = mapb[*(poli+pb)];
+            secondPixel[pg].bytes[i] =mapg[*(poli+1)];
+            secondPixel[pr].bytes[i] = mapr[*(poli+0)];
+            secondPixel[pb].bytes[i] = mapb[*(poli+1)];
             if(nbcomponents>3)
                 secondPixel[3].bytes[i] = mapw[*(poli+3)];
             
