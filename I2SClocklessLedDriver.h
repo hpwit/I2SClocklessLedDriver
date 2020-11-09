@@ -608,7 +608,7 @@ private:
             
             secondPixel[pg].bytes[i] =mapg[*(poli+1)];
             secondPixel[pr].bytes[i] = mapr[*(poli+0)];
-            secondPixel[pb].bytes[i] = mapb[*(poli+1)];
+            secondPixel[pb].bytes[i] = mapb[*(poli+2)];
             if(nbcomponents>3)
                 secondPixel[3].bytes[i] = mapw[*(poli+3)];
             
