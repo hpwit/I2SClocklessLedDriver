@@ -20,6 +20,7 @@
 #include "freertos/semphr.h"
 #include <stdio.h>
 #include <rom/ets_sys.h>
+#include "esp32-hal-log.h"
 
 
 #ifndef COLOR_COMPONENT
@@ -78,6 +79,9 @@ public:
     uint8_t __blue_map[256];
     uint8_t __red_map[256];
     uint8_t  __white_map[256];
+    /*
+     This flag is used when using the NO_WAIT modeÒÒ
+     */
     volatile bool isDisplaying=false;
     volatile bool isWaiting=true;
     
@@ -156,10 +160,12 @@ public:
         
         i2s->timing.val = 0;
         i2s->int_ena.val = 0;
+        /*
         // -- Allocate i2s interrupt
         SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ENA_V,1, I2S_OUT_EOF_INT_ENA_S);
         SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
         SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
+        */
         esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM , &interruptHandler, this, &_gI2SClocklessDriver_intr_handle);
         
         // -- Create a semaphore to block execution until all the controllers are done
@@ -173,24 +179,28 @@ public:
     
     void initDMABuffers()
     {
-        DMABuffersTampon[0] = allocateDMABuffer(COLOR_COMPONENT*8*2*3); //the buffers for the
-        DMABuffersTampon[1] = allocateDMABuffer(COLOR_COMPONENT*8*2*3);
-        DMABuffersTampon[2] = allocateDMABuffer(COLOR_COMPONENT*8*2*3);
-        DMABuffersTampon[3] = allocateDMABuffer(COLOR_COMPONENT*8*2*3);
+        DMABuffersTampon[0] = allocateDMABuffer(nb_components*8*2*3); //the buffers for the
+        DMABuffersTampon[1] = allocateDMABuffer(nb_components*8*2*3);
+        DMABuffersTampon[2] = allocateDMABuffer(nb_components*8*2*3);
+        DMABuffersTampon[3] = allocateDMABuffer(nb_components*8*2*3);
         
         putdefaultones((uint16_t*)DMABuffersTampon[0]->buffer );
         putdefaultones((uint16_t*)DMABuffersTampon[1]->buffer );
         
         
 #ifdef FULL_BUFFER
-        
+        /*
+         We do create n+2 buffers
+         the first buffer is to be sure that everything is 0
+         the last one is to put back the I2S at 0 the last bufffer is longer because when using the loop display mode the time between two frames needs to be longh enough.
+         */
         DMABuffersTransposed=(I2SClocklessLedDriverDMABuffer **)malloc(sizeof(I2SClocklessLedDriverDMABuffer *) * (num_led_per_strip+2));
         for(int i=0;i<num_led_per_strip+2;i++)
         {
             if(i<num_led_per_strip+1)
-                DMABuffersTransposed[i]=allocateDMABuffer(COLOR_COMPONENT*8*2*3);
+                DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3);
             else
-                DMABuffersTransposed[i]=allocateDMABuffer(COLOR_COMPONENT*8*2*3*4);
+                DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3*4);
             
             if (i)
             {
@@ -226,7 +236,7 @@ public:
          */
         if(__displayMode==LOOP && isDisplaying)
         {
-            printf("The loop mode is activated execute stopDisplayLoop() first.\n");
+            log_e("The loop mode is activated execute stopDisplayLoop() first");
             return;
         }
         /*
@@ -247,7 +257,7 @@ public:
         {
             isWaiting=true;
             xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
-            //Serial.println("retrun");
+            
         }
     }
     
@@ -260,6 +270,11 @@ public:
     }
     void showPixelsFirstTranpose(displayMode dispmode)
     {
+        if(leds==NULL)
+        {
+            printf("no leds buffer defined");
+            return;
+        }
         transposeAll();
         showPixelsFromBuffer(dispmode);
     }
@@ -357,12 +372,21 @@ public:
         setPixel(pos,red,green,blue,0);
     }
     
+    void initled(int * Pinsq,int num_strips,int num_led_per_strip,colorarrangment cArr)
+    {
+        initled(NULL,Pinsq,num_strips,num_led_per_strip,cArr);
+    }
+    
 #endif
     
     
     void showPixels()
     {
-        
+        if(leds==NULL)
+        {
+            log_e("no leds buffer defined");
+            return;
+        }
         ledToDisplay=0;
         transpose=true;
         DMABuffersTampon[0]->descriptor.qe.stqe_next=&(DMABuffersTampon[1]->descriptor);
@@ -377,8 +401,7 @@ public:
         
         isWaiting=true;
         xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
-      
-        
+ 
     }
     
     
@@ -452,14 +475,14 @@ private:
     volatile bool wait;
     displayMode __displayMode;
     volatile int ledToDisplay;
-    volatile int oo=0;
+   // volatile int oo=0;
     uint8_t *leds;
     int dmaBufferCount=2; //we use two buffers
     volatile bool transpose=false;
     
     volatile  int num_strips;
     volatile  int num_led_per_strip;
-    int clock_pin;
+    //int clock_pin;
     int brigthness;
     int p_r,p_g,p_b;
     int i2s_base_pin_index;
@@ -478,14 +501,14 @@ private:
         I2SClocklessLedDriverDMABuffer * b = (I2SClocklessLedDriverDMABuffer *)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
         if(!b)
         {
-            printf("no more memory\n");
+            log_e("No more memory\n");
             return NULL;
         }
         
         b->buffer = (uint8_t *)heap_caps_malloc(bytes, MALLOC_CAP_DMA);
         if(!b->buffer)
         {
-            printf("no more memory\n");
+            log_e("No more memory\n");
             return NULL;
         }
         memset(b->buffer, 0, bytes);
@@ -523,14 +546,16 @@ private:
         i2sReset();
         
         (&I2S0)->conf.tx_start = 0;
-        //while((&I2S0)->conf.tx_start);
+        /*
+         We have finished to display the strips
+         */
         isDisplaying=false;
         
     }
     
     void putdefaultones(uint16_t * buffer)
     {
-        /*
+        /*order to push the data to the pins
          0:D7
          1:1
          2:1
@@ -556,7 +581,7 @@ private:
          22:0
          23:D0
          */
-        for(int i=0;i<COLOR_COMPONENT*8/2;i++)
+        for(int i=0;i<nb_components*8/2;i++)
         {
             buffer[i*6+1]=0xffff;
             buffer[i*6+2]=0xffff;
@@ -565,6 +590,10 @@ private:
         
     }
     
+    /*
+     Transpose the pixel, as the function is static and all the variables are not static or global, we need to provide all of them.
+     */
+    
     static IRAM_ATTR void loadAndTranspose(uint8_t * ledt,int led_per_strip,int num_stripst,uint16_t *buffer,int ledtodisp,uint8_t *mapg,uint8_t *mapr,uint8_t *mapb,uint8_t *mapw,int nbcomponents,int pg,int pr,int pb)
     {
         Lines secondPixel[nbcomponents];
@@ -572,9 +601,9 @@ private:
         uint8_t *poli=ledt+ledtodisp*nbcomponents;
         for(int i = 0; i < num_stripst; i++) {
             
-            secondPixel[pg].bytes[i] =mapg[*(poli+1)];
-            secondPixel[pr].bytes[i] = mapr[*(poli+0)];
-            secondPixel[pb].bytes[i] = mapb[*(poli+2)];
+            secondPixel[pg].bytes[i] =mapg[*(poli+pg)];
+            secondPixel[pr].bytes[i] = mapr[*(poli+pr)];
+            secondPixel[pb].bytes[i] = mapb[*(poli+pb)];
             if(nbcomponents>3)
                 secondPixel[3].bytes[i] = mapw[*(poli+3)];
             
@@ -591,7 +620,7 @@ private:
         
     }
     
-    static    void transpose16x1_noinline2(unsigned char *A, uint16_t *B) {
+    static  void transpose16x1_noinline2(unsigned char *A, uint16_t *B) {
         
         uint32_t  x, y, x1,y1,t;
         
@@ -665,13 +694,20 @@ private:
         
         (&I2S0)->int_clr.val = (&I2S0)->int_raw.val;
         (&I2S0)->int_ena.val = 0;
+        
+        /*
+         If we do not use the regular showpixels, then no need to activate the interupt at the end of each pixels
+         */
         if(transpose)
             (&I2S0)->int_ena.out_eof = 1;
         
         (&I2S0)->int_ena.out_total_eof=1;
         esp_intr_enable(_gI2SClocklessDriver_intr_handle);
         
+        //We start the I2S
         (&I2S0)->conf.tx_start = 1;
+        
+        //Set the mode to indicate that we've started
         isDisplaying=true;
         
     }
