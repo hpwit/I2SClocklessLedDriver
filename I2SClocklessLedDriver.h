@@ -23,9 +23,6 @@
 #include "esp32-hal-log.h"
 
 
-#ifndef COLOR_COMPONENT
-#define COLOR_COMPONENT 3
-#endif
 
 
 
@@ -200,7 +197,7 @@ public:
             if(i<num_led_per_strip+1)
                 DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3);
             else
-                DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3*4);
+                DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3*13	);
             
             if (i)
             {
@@ -321,6 +318,7 @@ public:
         colors[p_r]=__red_map[red];
         colors[p_b]=__blue_map[blue];
         uint16_t *B=(uint16_t*)DMABuffersTransposed[posOnStrip+1]->buffer;
+       // printf("nb c:%d\n",nb_components);
         uint8_t y=colors[0];
         *((uint16_t*)(B)) =   (*((uint16_t*)(B))& mask) | ((uint16_t)((y &   128)>>7) <<stripNumber);
         *((uint16_t*)(B+5)) =   (*((uint16_t*)(B+5))& mask) | ((uint16_t)((y & 64)>>6) <<stripNumber);
@@ -456,6 +454,7 @@ public:
                 p_b=2;
                 break;
         }
+        printf("nb c:%d\n",nb_components);
 
         setBrightness(255);
         dmaBufferCount=2;
@@ -601,9 +600,9 @@ private:
         uint8_t *poli=ledt+ledtodisp*nbcomponents;
         for(int i = 0; i < num_stripst; i++) {
             
-            secondPixel[pg].bytes[i] =mapg[*(poli+pg)];
-            secondPixel[pr].bytes[i] = mapr[*(poli+pr)];
-            secondPixel[pb].bytes[i] = mapb[*(poli+pb)];
+            secondPixel[pg].bytes[i] =mapg[*(poli+1)];
+            secondPixel[pr].bytes[i] = mapr[*(poli+0)];
+            secondPixel[pb].bytes[i] = mapb[*(poli+2)];
             if(nbcomponents>3)
                 secondPixel[3].bytes[i] = mapw[*(poli+3)];
             
@@ -615,7 +614,7 @@ private:
         transpose16x1_noinline2(secondPixel[1].bytes,(uint16_t*)buffer+3*8);
         transpose16x1_noinline2(secondPixel[2].bytes,(uint16_t*)buffer+2*3*8);
         if(nbcomponents>3)
-            transpose16x1_noinline2(secondPixel[3].bytes,(uint16_t*)buffer+3*3*8);
+            transpose16x1_noinline2(secondPixel[3].bytes,(uint16_t*)buffer+3*3*4);
         
         
     }

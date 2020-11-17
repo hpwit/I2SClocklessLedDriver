@@ -18,7 +18,7 @@ void IRAM_ATTR I2SClocklessLedDriver::interruptHandler(void *arg)
             if(cont->ledToDisplay<cont->num_led_per_strip)
             {
                 cont->loadAndTranspose(cont->leds,cont->num_led_per_strip,cont->num_strips,(uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer,cont->ledToDisplay,cont->__green_map,cont->__red_map,cont->__blue_map,cont->__white_map,cont->nb_components,cont->p_g,cont->p_r,cont->p_b);
-                if(cont->ledToDisplay==cont->num_led_per_strip-3)  //here it's not -1 because it takes trime top have the change into account and it reread the buufer
+                if(cont->ledToDisplay==cont->num_led_per_strip-3)  //here it's not -1 because it takes time top have the change into account and it reread the buufer
                 {
                     cont->DMABuffersTampon[cont->dmaBufferActive]->descriptor.qe.stqe_next=&(cont->DMABuffersTampon[3]->descriptor);
                 }
