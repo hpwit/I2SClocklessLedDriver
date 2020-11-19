@@ -62,7 +62,7 @@ driver.initled((uint8_t*)leds,pins,4,NUM_LED_PER_STRIPS,ORDER_GRB);
 We are declaring that my `leds` array represent 4 strips of `NUM_LED_PER_STRIPS` leds ,each strip being linked to the pins defined in the pins array `pins`. This is way easier to declare a lot of strips. As discussed before if your strips are not of the same lentgh just define `NUM_LED_PER_STRIPS` with the largest `number_of_leds`.
 
 
-### First less declare a new driver
+### First let's declare a new driver
 
 ```C
 #include "I2SClocklessLedDriver.h"
@@ -107,39 +107,39 @@ uint8_t leds[4*NUM_LEDS];
  example 4: declaring 12 strips of 256 leds in GRB 
  ```C
  #define NUM_STRIPS 12
- #define NUM_LEDS_PER_STRIPS 256
+ #define NUM_LEDS_PER_STRIP 256
  
  #include "I2SClocklessLedDriver.h"
 
  I2SClocklessLedDriver driver;
  
  
- uint8_t leds[3*NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]; //equivalent of CRGB leds[NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]
+ uint8_t leds[3*NUM_STRIPS*NUM_LEDS_PER_STRIP]; //equivalent of CRGB leds[NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]
  int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
- driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIPS,ORDER_GRB);
+ driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
  
  ```
  
  example 5: declaring 12 strips of 256 leds in RGBW
  ```C
  #define NUM_STRIPS 12
- #define NUM_LEDS_PER_STRIPS 256
+ #define NUM_LED_PER_STRIP 256
  
  #include "I2SClocklessLedDriver.h"
 
  I2SClocklessLedDriver driver;
  
  
- uint8_t leds[4*NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]; 
+ uint8_t leds[4*NUM_STRIPS*NUM_LED_PER_STRIP]; 
  int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
- driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIPS,ORDER_GRBW);
+ driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
  
  ```
  #### `setBrightness(int brightness)`:
  
  This function sets the default brightness for 0->255
  
- ### `showPixels()`:
+ #### `showPixels()`:
  
  This function displays the pixels.
  
