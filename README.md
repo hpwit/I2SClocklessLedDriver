@@ -52,7 +52,7 @@ CRGB *leds4=leds+3*NUM_LED_PER_STRIPS;
 
 If all the strips of the first example are of the same size, then the 2 examples are the doing exactly the same. Hence when using strips of different lengths we cannot put them in a  big array ? **FALSE**. You cant create a large array when using `NUM_LED_PER_STRIP` being the largest of `number_of_leds`. Of course you array woul be larger than you actual numbre of leds but we can do with the lost of space.
 
-### OK, but what is the link between arry of strips and this driver ?
+### OK, but what is the link between an array of strips and this driver ?
 Here is how we would declare the 4 strips in of our example:
 ```C
 CRGB leds[4*NUM_LED_PER_STRIPS];
@@ -91,11 +91,11 @@ uint8_t leds[4*NUM_LEDS];
 #### `initled(uint8_t *leds,int * Pins,int num_strips,int num_led_per_strip,colorarrangment cArr)`:
 
  This function initialize the strips.
- * `*leds`: a pointer to the leds array
+* `*leds`: a pointer to the leds array
 * `*Pins`: a pointer to the pins array
-*`num_strips`: the number of parallel strips
-*`num_led_per_strip`: the number of leds per strip (or the number of leds in the longuest strip)
-*`cArr`: The led ordering
+* `num_strips`: the number of parallel strips
+* `num_led_per_strip`: the number of leds per strip (or the number of leds in the longuest strip)
+* `cArr`: The led ordering
     * `ORDER_GRBW`: For the RGBW strips
     * `ORDER_RGB`
     * `ORDER_RBG`
@@ -113,11 +113,9 @@ uint8_t leds[4*NUM_LEDS];
 
  I2SClocklessLedDriver driver;
  
- 
  uint8_t leds[3*NUM_STRIPS*NUM_LEDS_PER_STRIP]; //equivalent of CRGB leds[NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]
  int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
  driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
- 
  ```
  
  example 5: declaring 12 strips of 256 leds in RGBW
@@ -129,11 +127,9 @@ uint8_t leds[4*NUM_LEDS];
 
  I2SClocklessLedDriver driver;
  
- 
  uint8_t leds[4*NUM_STRIPS*NUM_LED_PER_STRIP]; 
  int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
  driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
- 
  ```
  #### `setBrightness(int brightness)`:
  
@@ -156,6 +152,13 @@ uint8_t leds[4*NUM_LEDS];
 * `getting_started.ino`: an example to use 16 parallel strips of 256 leds 
 * `getting_started_Fastled.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects 
 * `getting_started_RGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
+
+
+## Artifacts, DMA, second core, transposition
+
+### Artifacts
+
+
  
  
  

@@ -381,9 +381,9 @@ public:
     {
         uint8_t *offset=leds+(pos<<2); //faster than doing * 4
         *(offset)=red;
-        *(offset+1)=green;
-        *(offset+2)=blue;
-        *(offset+3)=white;
+        *(++offset)=green;
+        *(++offset)=blue;
+        *(++offset)=white;
         
     }
     
@@ -391,8 +391,8 @@ public:
     {
         uint8_t *offset=leds+(pos<<	1)+pos;
         *(offset)=red;
-        *(offset+1)=green;
-        *(offset+2)=blue;
+        *(++offset)=green;
+        *(++offset)=blue;
     }
     
     void showPixels()
