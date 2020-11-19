@@ -152,9 +152,12 @@ uint8_t leds[4*NUM_LEDS];
  This function displays the pixels.
  
  #### Examples:
- `getting_started.ino`: an example to use 16 parallel strips of 256 leds
- `getting_started_Fastled.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects (`CRGB`and `CHSV`)
- `getting_started_RGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
+ *`getting_started.ino`*: an example to use 16 parallel strips of 256 leds
+ 
+* `getting_started_Fastled.ino`*: an example to use 16 parallel strips of 256 leds using FastLED objects (`CRGB`and `CHSV`)
+ 
+* `getting_started_RGBW.ino`*: an example to use 16 parallel strips of 256 leds of RGBW leds
+ 
  
  
  
