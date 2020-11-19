@@ -222,7 +222,7 @@ public:
     
     void showPixelsFromBuffer()
     {
-        showPixelsFromBuffer(WAIT);
+        showPixelsFromBuffer(NO_WAIT);
     }
     
     
@@ -264,7 +264,7 @@ public:
     
     void showPixelsFirstTranpose()
     {
-        showPixelsFirstTranpose(WAIT);
+        showPixelsFirstTranpose(NO_WAIT);
     }
     void showPixelsFirstTranpose(displayMode dispmode)
     {
@@ -307,7 +307,7 @@ public:
     }
     
     
-    void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)
+    void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)
     {
         uint32_t stripNumber=pos/num_led_per_strip;
         uint32_t posOnStrip=pos%num_led_per_strip;
@@ -366,9 +366,9 @@ public:
         }
     }
     
-    void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)
+    void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)
     {
-        setPixel(pos,red,green,blue,0);
+        setPixelinBuffer(pos,red,green,blue,0);
     }
     
     void initled(int * Pinsq,int num_strips,int num_led_per_strip,colorarrangment cArr)
@@ -377,7 +377,23 @@ public:
     }
     
 #endif
+    void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)
+    {
+        uint8_t *offset=leds+(pos<<2); //faster than doing * 4
+        *(offset)=red;
+        *(offset+1)=green;
+        *(offset+2)=blue;
+        *(offset+3)=white;
+        
+    }
     
+    void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)
+    {
+        uint8_t *offset=leds+(pos<<	1)+pos;
+        *(offset)=red;
+        *(offset+1)=green;
+        *(offset+2)=blue;
+    }
     
     void showPixels()
     {
@@ -615,7 +631,7 @@ public:
         transpose16x1_noinline2(secondPixel[1].bytes,(uint16_t*)buffer+3*8);
         transpose16x1_noinline2(secondPixel[2].bytes,(uint16_t*)buffer+2*3*8);
         if(nbcomponents>3)
-            transpose16x1_noinline2(secondPixel[3].bytes,(uint16_t*)buffer+3*3*4);
+            transpose16x1_noinline2(secondPixel[3].bytes,(uint16_t*)buffer+3*3*8);
         
         
     }

@@ -139,9 +139,23 @@ uint8_t leds[4*NUM_LEDS];
  
  This function sets the default brightness for 0->255
  
+ #### `setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)`:
+ Set the color of a pixel 
+ 
+ NB: if you are familiar with FastLED it would be `leds[pos]=CRGB(red,green,blue)` as you will see in the examples
+ 
+ #### `setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)`:
+ Set the color of a pixel for RGBW strips
+ 
  #### `showPixels()`:
  
  This function displays the pixels.
+ 
+ #### Examples:
+ `getting_started.ino`: an example to use 16 parallel strips of 256 leds
+ `getting_started_Fastled.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects (`CRGB`and `CHSV`)
+ `getting_started_RGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
+ 
  
  
  
