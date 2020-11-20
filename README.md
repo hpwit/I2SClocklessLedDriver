@@ -283,7 +283,15 @@ If you're animation is not smooth enough we can sync using `waitSync()`.
 Example: `FullBufferLoopSync.ino`  play with the `waitSync()` to see the difference.
 
 ## Conclusion
+I guess I am getting crazy doing that lol. If you have the memory for it then use the DMA buffer and the `showPixelsFirstTranpose()`  if you can you are sure not to have issue with interupts.
 
+If you wanna play old school, use `showPixelsFromBuffer(LOOP)`.  
+
+In any case do not hesitate to contact me for features and remarks
+
+## What is next ?
+Add functionnalities to set the sync at any point plus interupt. (for the one old enough it will remind them of souvenirs)
+Improve the speed of `setPixelinBuffer` the function is a bit slow for now.
 
 
 
