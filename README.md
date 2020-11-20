@@ -1,6 +1,6 @@
 # I2SClocklessLedDriver for esp32
 ## Introduction
-### What kind of led wan you drive
+### What kind of led do you want to drive
 This library is a new take on driving ws2812 leds with I2S on an esp32. It allows to drive up to 16 strips leds in parallel of  
 * RGB:
     * WS2812,
