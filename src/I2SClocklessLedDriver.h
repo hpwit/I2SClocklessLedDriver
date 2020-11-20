@@ -471,7 +471,6 @@ public:
                 p_b=2;
                 break;
         }
-        printf("nb c:%d\n",nb_components);
 
         setBrightness(255);
         dmaBufferCount=2;

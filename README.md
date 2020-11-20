@@ -217,7 +217,7 @@ int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
 driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
 
 ```
-Now two new functions are available
+Now three new functions are available
 
 #### `showPixelsFirstTranpose()` 
 This function will transpose the entire led array and the display it. Has this function as en async function when lauching twice it will wait for the first one the finish
@@ -242,7 +242,43 @@ modifytheledfunction() ....
 showPixelsFirstTranpose();
 
 ```
-Example: `FullBufferFastLED.ino` this example is the equivalent of  `gettingstartedFastLED.ino` but using the buffer. It can be noticed that the overall fps is now equivalent to 
+
+Example: `FullBufferFastLED.ino` this example is the equivalent of  `gettingstartedFastLED.ino` but using the buffer. It can be noticed that the overall fps is now higher. 
+
+#### `setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)`
+This function put a pixel directly in the DMA buffer doing the transposition for RGB leds
+
+
+#### `setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)`
+This function put a pixel directly in the DMA buffer doing the transposition for RGBW leds
+
+**If you are using these two functions and use `showPixelsFirstTranpose()` it will not work as this function will erase the DMA buffer while transposing the entire led buffer**
+
+To display the content of the DMA buffer directly use
+
+#### `showPixelsFromBuffer()`
+This function directly show the leds from the DMA buffer without doing any transposition of the led buffer. 
+
+Example: `FullBufferWithoutTransposition.ino` 
+
+#### Remember what a video chip is ?
+A video chip is  in continuously displaying the content of the video RAM (with some perks like for a game boy) without using the CPU at all.
+
+Now you can consider the DMA buffer as video RAM and the video chip as the I2S. We just need to have hte showPixelsFromBuffer to  loop.
+
+`showPixelsFromBuffer(LOOP)` : this function will display the content of the DMA buffer wihtout using the CPU
+
+Example: `FullBufferLoop.ino`  In this example only with one show function
+
+If you want to stop the loop `stopDisplayLoop()`  look at the example `FullBufferLoopStartStop.ino` . The lopp is stopped after 500 'turns' and restart afer 1500.
+
+#### What about frame synchro ??
+
+
+
+
+
+
 
 
 
