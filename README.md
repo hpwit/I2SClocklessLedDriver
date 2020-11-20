@@ -222,6 +222,8 @@ Now three new functions are available
 #### `showPixelsFirstTranpose()` 
 This function will transpose the entire led array and the display it. Has this function as en async function when lauching twice it will wait for the first one the finish
 
+**It's like you are running it on a second core without using it**
+
 Example: if you size of your strip is 500 leds it will take 18ms to display
 ```c
 //the duration of the to commands below will be 18ms+18ms =36ms
@@ -274,6 +276,13 @@ If you want to stop the loop `stopDisplayLoop()`  look at the example `FullBuffe
 
 #### What about frame synchro ??
 
+Using the loop functionality you don't know when you update the DMA buffer which pixel the I2s is currently displaying. As a consequence it can lead to not smooth animations.
+
+If you're animation is not smooth enough we can sync using `waitSync()`.
+
+Example: `FullBufferLoopSync.ino`  play with the `waitSync()` to see the difference.
+
+## Conclusion
 
 
 

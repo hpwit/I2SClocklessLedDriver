@@ -37,6 +37,7 @@
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static  void   IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
 static intr_handle_t _gI2SClocklessDriver_intr_handle;
+
 enum  colorarrangment{
     ORDER_GRBW,
     ORDER_RGB,
@@ -82,6 +83,8 @@ public:
      */
     volatile bool isDisplaying=false;
     volatile bool isWaiting=true;
+     volatile bool framesync=false;
+     volatile int counti;
     
     
     I2SClocklessLedDriver(){};
@@ -199,12 +202,16 @@ public:
                 DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3);
             else
                 DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3*4	);
-            
+            if(i<num_led_per_strip)
+                DMABuffersTransposed[i]->descriptor.eof=0;
             if (i)
             {
                 DMABuffersTransposed[i - 1]->descriptor.qe.stqe_next=&(DMABuffersTransposed[i]->descriptor);
                 if(i<num_led_per_strip+1)
+                {
                     putdefaultones((uint16_t*)DMABuffersTransposed[i]->buffer );
+                    
+                }
             }
         }
 #endif
@@ -375,7 +382,9 @@ public:
     {
         initled(NULL,Pinsq,num_strips,num_led_per_strip,cArr);
     }
-    
+    void waitSync(){
+        while(!framesync && isDisplaying){}
+    }
 #endif
     void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)
     {
@@ -653,6 +662,8 @@ public:
     {
         
         i2sReset();
+        framesync=false;
+        counti=0;
         
         (&I2S0)->lc_conf.val=I2S_OUT_DATA_BURST_EN | I2S_OUTDSCR_BURST_EN | I2S_OUT_DATA_BURST_EN;
         
@@ -668,7 +679,7 @@ public:
         /*
          If we do not use the regular showpixels, then no need to activate the interupt at the end of each pixels
          */
-        if(transpose)
+        //if(transpose)
             (&I2S0)->int_ena.out_eof = 1;
         
         (&I2S0)->int_ena.out_total_eof=1;
@@ -703,7 +714,7 @@ static  void IRAM_ATTR  _I2SClocklessLedDriverinterruptHandler(void *arg)
   
     if(GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ST_V,  I2S_OUT_EOF_INT_ST_S))
     {
-        
+        cont->framesync=!cont->framesync;
         if( ((I2SClocklessLedDriver *)arg)->transpose)
         {
             cont->ledToDisplay++;
