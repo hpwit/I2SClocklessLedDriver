@@ -186,7 +186,7 @@ public:
         putdefaultones((uint16_t*)DMABuffersTampon[1]->buffer );
         
         
-#ifdef FULL_BUFFER
+#ifdef FULL_DMA_BUFFER
         /*
          We do create n+2 buffers
          the first buffer is to be sure that everything is 0
@@ -213,7 +213,7 @@ public:
     }
     
     
-#ifdef FULL_BUFFER
+#ifdef FULL_DMA_BUFFER
     
     void stopDisplayLoop()
     {

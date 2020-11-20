@@ -16,6 +16,8 @@ I have rewritten the library out of the FastLED framework  to allow easier testi
 
 But the main reason is the way I wanted to drive the leds. Indeed the library gives you two more options that can prove to be useful. One of the mode could reminder the older of us to some old school stuff.
 
+I am trying to be kinda lenghtly on this readme. I hope to explain the why of some functions and for the user to use the one most suitable for its use case.
+
 ## Let's start
 ### Array of strips
 In most leds driver librairies you declare each strip attached to one pin, one line at a time.
@@ -149,14 +151,101 @@ uint8_t leds[4*NUM_LEDS];
  
  #### Examples:
  
-* `getting_started.ino`: an example to use 16 parallel strips of 256 leds 
-* `getting_started_Fastled.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects 
-* `getting_started_RGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
+* `gettingstarted.ino`: an example to use 16 parallel strips of 256 leds 
+* `gettingstartedFastLED.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects 
+* `gettingstartedRGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
 
 
-## Artifacts, DMA, second core, transposition
+## Artifacts, DMA, second core, transposition, ...
 
 ### Artifacts
+The ESP32 is a great controller with Wi-FI ,Bluetooth, RTOS, ... but this can cause the program you're running to stop at certain point in time or interupts not behaving as usual. This happen for a very small amount of time that you usually don't notice but when driving leds this can cause artifacts as these leds are really timing specifics. These artifacts have been reported especially when using wi-fi. A lot of effort has been put in order to avoid the artifacts. And it seems to work quite fine with this version of the driver.
+
+To avoid this issue the idea would be to delegate the signal sending to a peripheral that does not rely on the CPU.
+
+#### DMA and I2S
+On the ESP32 it's possible to link a specific type of memory DMA (direct memory access) to the I2S driver (or the SPI). What happen in that case is that the I2S will be fed by the DMA without use of the CPU.
+The I2S driver will push the data to the pins at a spefic fixed rate without the use of the CPU too.
+
+That is the technique which used.
+
+#### Great BUT ...
+The driver uses two DMA buffers which are linked to one another. (B1 and B2). When B1 is read and pushed by the I2S then it will B2 and push it then back to B1 etc ... . Each time a buffer has finished to be pushed a interrupt occurs. In the driver the first set of pixels is loaded in B1 and during the time that B1 is pushed by the I2S we load B2. Once B1 has been pushed it will move to read B2 and push an interupt that allows us to load the next batch in B1. Once B2 has finished to be pushed an interupt occurs and start reading B1 it then load the next set of pixels in B2 and so on and so forth until all the led has been pushed.
+
+This process works very fine, except of the interupt gets stucks because of wi-fi or something else. The interrupt code is stored in a specific part od the memory IRAM_ATTR that is 'protected' from interupts. **But it can happen that the interupts gets 'pushed' by wi-fi or other internal ticks.**
+
+### A solution : push everything in DMA
+The idea is to create a 'big' DMA buffer already filled with all the leds and the tell the I2S to read from that huge buffer. Hence no interupt to take care and the CPU rests during that time.
+
+#### Of course but I need memory
+To transmit a RGB pixel we need to transmit 24 bits adn 32 bits for a RGBW pixel. To respect the timing requirements of the leds we send 'ticks' during wich the ourput is high or low. in our case we sent 3 ticks per bits. for
+* a 0 bit , 1 0 0 are sent (the output stays high during 416ns and low 834ns)
+* a 1 bit , 1 1 0 are sent (the output stays high during 834ns and low 416ns)
+
+NB:  This is the common use approximation of the real timing but it works fine.
+
+Hence to send 24 bit we need 3x24=72 'ticks'. Hence this big DMA buffer will need to need to be 3 times bigger than the led array.
+
+But we are not sending 1 strip at a time but up to 16 strips.
+
+#### Transposition
+The driver whatever the number of strips, sends 16 bits (2 bytes ) to the I2S at each 'ticks'. That means for sending 16 parallel pixels (1 pixel of each 16 strips) you need a buffer of size 24x3x2=144 bytes instead of 16x3=48 bytes in the leds array for RGB leds.
+
+The operation that loads the leds of each strips in serie and move it in parallel is called transposition.
+
+As a consequence the size of the big DMA buffer is only link to the `NUM_LED_PER_STRIP` and not the `NUM_STRIPS`. For instance a DMA buffer for 4 strips of 256 leds will be of the same size of 16 strips of 256 leds.
+
+### OK I have enough memory and what else ?
+For most of your usage you will have enough memory. Hence the big buffer can be created allowing some new stuff
+
+#### No need for second core
+Normally to speed up things, you may program your animation on one core and display on the seconf core using two leds buffers. Here no need. When launching the new function described bellow, The CPU will not be used for the actual 'push' to the leds hence you CPU is free to do someting else.
+
+### Enabling Full DMA buffer
+```c
+#define FULL_DMA_BUFFER //this will enable the full dma buffer
+
+#define NUM_STRIPS 12
+#define NUM_LED_PER_STRIP 256
+
+#include "I2SClocklessLedDriver.h"
+
+I2SClocklessLedDriver driver;
+
+uint8_t leds[4*NUM_STRIPS*NUM_LED_PER_STRIP]; 
+int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
+
+```
+Now two new functions are available
+
+#### `showPixelsFirstTranpose()` 
+This function will transpose the entire led array and the display it. Has this function as en async function when lauching twice it will wait for the first one the finish
+
+Example: if you size of your strip is 500 leds it will take 18ms to display
+```c
+//the duration of the to commands below will be 18ms+18ms =36ms
+showPixels();
+delay(18);
+
+//the duration of the two commands below will be 19ms 
+//the full transposition in the buffer will take 1 ms more or less then the code 
+//goes to the delay function has the displaying if the DMA buffer does not require CPU
+showPixelsFirstTranpose();
+delay(18);
+
+
+//in the example below if the modifytheledfunction() lasts less than the time  need to display the leds 
+//then the second call will wait before starting and then it's like the modifytheledfunction()
+showPixelsFirstTranpose();
+modifytheledfunction() ....
+showPixelsFirstTranpose();
+
+```
+Example: `FullBufferFastLED.ino` this example is the equivalent of  `gettingstartedFastLED.ino` but using the buffer. It can be noticed that the overall fps is now equivalent to 
+
+
+
 
 
  
