@@ -33,10 +33,15 @@
 #define CC (0x0000CCCCL)
 #define FF (0xF0F0F0F0L)
 #define FF2 (0x0F0F0F0FL)
-
+typedef union {
+    uint8_t bytes[16];
+    uint32_t shorts[8];
+    uint32_t raw[2];
+} Lines;
 static const char* TAG = "I2SClocklessLedDriver";
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static  void   IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
+static  void  IRAM_ATTR loadAndTranspose(uint8_t * ledt,int led_per_strip,int num_stripst,uint16_t *buffer,int ledtodisp,uint8_t *mapg,uint8_t *mapr,uint8_t *mapb,uint8_t *mapw,int nbcomponents,int pg,int pr,int pb);
 static intr_handle_t _gI2SClocklessDriver_intr_handle;
 
 enum  colorarrangment{
@@ -63,11 +68,7 @@ class I2SClocklessLedDriver {
         lldesc_t descriptor;
         uint8_t * buffer;
     };
-    typedef union {
-        uint8_t bytes[16];
-        uint32_t shorts[8];
-        uint32_t raw[2];
-    } Lines;
+
     
     const int deviceBaseIndex[2] = {I2S0O_DATA_OUT0_IDX, I2S1O_DATA_OUT0_IDX};
     const int deviceClockIndex[2] = {I2S0O_BCK_OUT_IDX, I2S1O_BCK_OUT_IDX};
@@ -210,7 +211,7 @@ public:
             if(i<num_led_per_strip+1)
                 DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3);
             else
-                DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3*4    );
+                DMABuffersTransposed[i]=allocateDMABuffer(nb_components*8*2*3*4);
             if(i<num_led_per_strip)
                 DMABuffersTransposed[i]->descriptor.eof=0;
             if (i)
@@ -366,7 +367,7 @@ public:
         *((uint16_t*)(B+12)) =   (*((uint16_t*)(B+12))& mask) | ((uint16_t)((y& 8)>>3) <<stripNumber);
         *((uint16_t*)(B+17)) =   (*((uint16_t*)(B+17))& mask) | ((uint16_t)((y& 4)>>2) <<stripNumber);
         *((uint16_t*)(B+18)) =   (*((uint16_t*)(B+18))& mask) | ((uint16_t)((y& 2)>>1) <<stripNumber);
-        *((uint16_t*)(B+23)) =   (*((uint16_t*)(B+23))& mask) | ((uint16_t)(y & 1) <<stripNumber);;
+        *((uint16_t*)(B+23)) =   (*((uint16_t*)(B+23))& mask) | ((uint16_t)(y & 1) <<stripNumber);
         if(nb_components>3)
         {
             B+=3*8;
@@ -407,7 +408,7 @@ public:
     
     void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)
     {
-        uint8_t *offset=leds+(pos<<    1)+pos;
+        uint8_t *offset=leds+(pos<<1)+pos;
         *(offset)=red;
         *(++offset)=green;
         *(++offset)=blue;
@@ -631,31 +632,7 @@ public:
      Transpose the pixel, as the function is static and all the variables are not static or global, we need to provide all of them.
      */
     
-    static  void  IRAM_ATTR loadAndTranspose(uint8_t * ledt,int led_per_strip,int num_stripst,uint16_t *buffer,int ledtodisp,uint8_t *mapg,uint8_t *mapr,uint8_t *mapb,uint8_t *mapw,int nbcomponents,int pg,int pr,int pb)
-    {
-        Lines secondPixel[nbcomponents];
-        
-        uint8_t *poli=ledt+ledtodisp*nbcomponents;
-        for(int i = 0; i < num_stripst; i++) {
-            
-            secondPixel[pg].bytes[i] =mapg[*(poli+1)];
-            secondPixel[pr].bytes[i] = mapr[*(poli+0)];
-            secondPixel[pb].bytes[i] = mapb[*(poli+2)];
-            if(nbcomponents>3)
-                secondPixel[3].bytes[i] = mapw[*(poli+3)];
-            
-            poli+=led_per_strip*nbcomponents;
-            
-        }
-        
-        transpose16x1_noinline2(secondPixel[0].bytes,(uint16_t*)buffer );
-        transpose16x1_noinline2(secondPixel[1].bytes,(uint16_t*)buffer+3*8);
-        transpose16x1_noinline2(secondPixel[2].bytes,(uint16_t*)buffer+2*3*8);
-        if(nbcomponents>3)
-            transpose16x1_noinline2(secondPixel[3].bytes,(uint16_t*)buffer+3*3*8);
-        
-        
-    }
+    
 
     
 //    void transpose16x1_noinline2(uint8_t y,uint16_t *B,uint16_t mask,uint16_t mask2,int stripNumber) {
@@ -734,7 +711,7 @@ static  void IRAM_ATTR  _I2SClocklessLedDriverinterruptHandler(void *arg)
             cont->ledToDisplay++;
             if(cont->ledToDisplay<cont->num_led_per_strip)
             {
-                cont->loadAndTranspose(cont->leds,cont->num_led_per_strip,cont->num_strips,(uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer,cont->ledToDisplay,cont->__green_map,cont->__red_map,cont->__blue_map,cont->__white_map,cont->nb_components,cont->p_g,cont->p_r,cont->p_b);
+               loadAndTranspose(cont->leds,cont->num_led_per_strip,cont->num_strips,(uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer,cont->ledToDisplay,cont->__green_map,cont->__red_map,cont->__blue_map,cont->__white_map,cont->nb_components,cont->p_g,cont->p_r,cont->p_b);
                 if(cont->ledToDisplay==cont->num_led_per_strip-3)  //here it's not -1 because it takes time top have the change into account and it reread the buufer
                 {
                     cont->DMABuffersTampon[cont->dmaBufferActive]->descriptor.qe.stqe_next=&(cont->DMABuffersTampon[3]->descriptor);
@@ -819,5 +796,31 @@ static  void   IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B) 
     *((uint16_t*)(B+17)) = (uint16_t)(((y & 0xff0000) |((y1&0xff0000) <<8))>>16);
     *((uint16_t*)(B+18)) = (uint16_t)(((y & 0xff00) |((y1&0xff00) <<8))>>8);
     *((uint16_t*)(B+23)) = (uint16_t)((y & 0xff) |  (  (y1 & 0xff) << 8 ) )   ;
+    
+}
+
+static  void  IRAM_ATTR loadAndTranspose(uint8_t * ledt,int led_per_strip,int num_stripst,uint16_t *buffer,int ledtodisp,uint8_t *mapg,uint8_t *mapr,uint8_t *mapb,uint8_t *mapw,int nbcomponents,int pg,int pr,int pb)
+{
+    Lines secondPixel[nbcomponents];
+    
+    uint8_t *poli=ledt+ledtodisp*nbcomponents;
+    for(int i = 0; i < num_stripst; i++) {
+        
+        secondPixel[pg].bytes[i] =mapg[*(poli+1)];
+        secondPixel[pr].bytes[i] = mapr[*(poli+0)];
+        secondPixel[pb].bytes[i] = mapb[*(poli+2)];
+        if(nbcomponents>3)
+            secondPixel[3].bytes[i] = mapw[*(poli+3)];
+        
+        poli+=led_per_strip*nbcomponents;
+        
+    }
+    
+    transpose16x1_noinline2(secondPixel[0].bytes,(uint16_t*)buffer );
+    transpose16x1_noinline2(secondPixel[1].bytes,(uint16_t*)buffer+3*8);
+    transpose16x1_noinline2(secondPixel[2].bytes,(uint16_t*)buffer+2*3*8);
+    if(nbcomponents>3)
+        transpose16x1_noinline2(secondPixel[3].bytes,(uint16_t*)buffer+3*3*8);
+    
     
 }
