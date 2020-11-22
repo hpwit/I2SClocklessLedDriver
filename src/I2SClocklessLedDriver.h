@@ -578,15 +578,18 @@ public:
     {
         
         ets_delay_us(16);
+       
+        xSemaphoreGive(I2SClocklessLedDriver_semDisp);
         esp_intr_disable(_gI2SClocklessDriver_intr_handle);
         i2sReset();
         
         (&I2S0)->conf.tx_start = 0;
+        isDisplaying=false;
         /*
          We have finished to display the strips
          */
         
-        isDisplaying=false;
+        
         //xSemaphoreGive(I2SClocklessLedDriver_semDisp);
         
     }
@@ -735,11 +738,11 @@ static  void IRAM_ATTR  _I2SClocklessLedDriverinterruptHandler(void *arg)
     
     if(GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ST_V,  I2S_OUT_TOTAL_EOF_INT_ST_S))
     {
-        ((I2SClocklessLedDriver *)arg)->i2sStop();
-        portBASE_TYPE HPTaskAwoken = 0;
-            xSemaphoreGiveFromISR(((I2SClocklessLedDriver *)arg)->I2SClocklessLedDriver_semDisp, &HPTaskAwoken);
-            if(HPTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
         
+//        portBASE_TYPE HPTaskAwoken = 0;
+//            xSemaphoreGiveFromISR(((I2SClocklessLedDriver *)arg)->I2SClocklessLedDriver_semDisp, &HPTaskAwoken);
+//            if(HPTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
+        ((I2SClocklessLedDriver *)arg)->i2sStop();
         if(cont->isWaiting)
         {
             portBASE_TYPE HPTaskAwoken = 0;

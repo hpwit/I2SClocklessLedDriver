@@ -26,7 +26,7 @@ void loop() {
         for(int i=0;i<ledsperstrip;i++)
         {
             
-            driver.setPixel((i+off)%256+ledsperstrip*j,255-i,i,((128-i)+255)%255,i/25);
+            driver.setPixel((i+off)%ledsperstrip+ledsperstrip*j,255-i,i,((128-i)+255)%255,i/25);
             
         }
     }

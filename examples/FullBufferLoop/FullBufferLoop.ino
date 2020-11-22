@@ -27,7 +27,7 @@ void loop() {
         for(int i=0;i<ledsperstrip;i++)
         {
             
-           driver.setPixelinBuffer((i+off)%256+ledsperstrip*j,255-i,i,((128-i)+255)%255);
+           driver.setPixelinBuffer((i+off)%ledsperstrip+ledsperstrip*j,(ledsperstrip-i)*255/ledsperstrip,i*255/ledsperstrip,(((128-i)+255)%255)*255/ledsperstrip);
             
         }
     }
