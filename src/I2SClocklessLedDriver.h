@@ -43,6 +43,9 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static  void   IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
 static  void  IRAM_ATTR loadAndTranspose(uint8_t * ledt,int led_per_strip,int num_stripst,uint16_t *buffer,int ledtodisp,uint8_t *mapg,uint8_t *mapr,uint8_t *mapb,uint8_t *mapw,int nbcomponents,int pg,int pr,int pb);
 static intr_handle_t _gI2SClocklessDriver_intr_handle;
+static xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
+static  xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
+static  xSemaphoreHandle I2SClocklessLedDriver_semDisp= NULL;
 
 enum  colorarrangment{
     ORDER_GRBW,
@@ -108,7 +111,7 @@ public:
             __blue_map[i]=(uint8_t)((int)(i*brightness)/255);
             __red_map[i]=(uint8_t)((int)(i*brightness)/255);
             __white_map[i]=(uint8_t)((int)(i*brightness)/255);
-            
+            printf("b:%d\n", __green_map[i]);
         }
     }
 
@@ -522,10 +525,10 @@ public:
     int i2s_base_pin_index;
     int nb_components;
     
-    intr_handle_t I2SClocklessLedDriver_intr_handle;// = NULL;
-    xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
-   xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
-   xSemaphoreHandle I2SClocklessLedDriver_semDisp= NULL;
+   // intr_handle_t I2SClocklessLedDriver_intr_handle;// = NULL;
+//    xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
+//   xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
+//   xSemaphoreHandle I2SClocklessLedDriver_semDisp= NULL;
     //buffer array for the transposed leds
     I2SClocklessLedDriverDMABuffer ** DMABuffersTransposed=NULL;
     //buffer array for the regular way
@@ -728,7 +731,7 @@ static  void IRAM_ATTR  _I2SClocklessLedDriverinterruptHandler(void *arg)
             if(cont->framesync)
                 {
                     portBASE_TYPE HPTaskAwoken = 0;
-                    xSemaphoreGiveFromISR(((I2SClocklessLedDriver *)arg)->I2SClocklessLedDriver_semSync, &HPTaskAwoken);
+                    xSemaphoreGiveFromISR(I2SClocklessLedDriver_semSync, &HPTaskAwoken);
                     if(HPTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
                 }
         }
@@ -746,7 +749,7 @@ static  void IRAM_ATTR  _I2SClocklessLedDriverinterruptHandler(void *arg)
         if(cont->isWaiting)
         {
             portBASE_TYPE HPTaskAwoken = 0;
-            xSemaphoreGiveFromISR(((I2SClocklessLedDriver *)arg)->I2SClocklessLedDriver_sem, &HPTaskAwoken);
+            xSemaphoreGiveFromISR(I2SClocklessLedDriver_sem, &HPTaskAwoken);
             if(HPTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
         }
         
