@@ -79,6 +79,8 @@ public:
     uint8_t __blue_map[256];
     uint8_t __red_map[256];
     uint8_t  __white_map[256];
+    uint8_t _brightness;
+    float _gammar,_gammab,_gammag,_gammaw;
      intr_handle_t _gI2SClocklessDriver_intr_handle;
     volatile xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
     volatile xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
@@ -106,15 +108,38 @@ public:
     
     void setBrightness(int brightness)
     {
+        _brightness=brightness;
+         float tmp;
         for(int i=0;i<256;i++)
         {
-            __green_map[i]=(uint8_t)((int)(i*brightness)/255);
-            __blue_map[i]=(uint8_t)((int)(i*brightness)/255);
-            __red_map[i]=(uint8_t)((int)(i*brightness)/255);
-            __white_map[i]=(uint8_t)((int)(i*brightness)/255);
+            tmp=(float)powf((float(i/255),1/_gammag);
+            __green_map[i]=(uint8_t)((float)(tmp*brightness));
+            tmp=(float)powf(float(i/255),1/_gammab);
+            __blue_map[i]=(uint8_t)((float)(tmp*brightness));
+            tmp=(float)powf(float(i/255),1/_gammar);
+            __red_map[i]=(uint8_t)((float)(tmp*brightness));
+            tmp=(float)powf(float(i/255),1/_gammaw);
+            __white_map[i]=(uint8_t)((float)(tmp*brightness));
            
         }
     }
+
+    void setGamma(float gammar,float gammab,float gammag,float gammaw)
+    {
+        _gammag=gammag;
+        _gammar=gammar;
+        _gammaw=gammaw;
+        _gammab=gammab;
+        setBrightness(_brightness);
+    }
+
+    void setGamma(float gammar,float gammab,float gammag)
+    {
+        _gammag=gammag;
+        _gammar=gammar;
+        _gammab=gammab;
+        setBrightness(_brightness);
+    }    
 
     void i2sInit()
     {
@@ -494,7 +519,10 @@ public:
                 p_b=2;
                 break;
         }
-
+        _gammab=1;
+        _gammar=1;
+        _gammag=1;
+        _gammaw=1;
         setBrightness(255);
         dmaBufferCount=2;
         this->leds=leds;
