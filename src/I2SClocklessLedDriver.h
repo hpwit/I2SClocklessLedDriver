@@ -122,14 +122,14 @@ public:
          float tmp;
         for(int i=0;i<256;i++)
         {
-            tmp=(float)powf((float(i/255),1/_gammag));
-            __green_map[i]=(uint8_t)((float)(tmp*brightness));
-            tmp=(float)powf(float(i/255),1/_gammab);
-            __blue_map[i]=(uint8_t)((float)(tmp*brightness));
-            tmp=(float)powf(float(i/255),1/_gammar);
-            __red_map[i]=(uint8_t)((float)(tmp*brightness));
-            tmp=(float)powf(float(i/255),1/_gammaw);
-            __white_map[i]=(uint8_t)((float)(tmp*brightness));
+            tmp=powf((float)i/255,1/_gammag);
+            __green_map[i]=(uint8_t)(tmp*brightness);
+            tmp=powf((float)i/255,1/_gammag);
+            __blue_map[i]=(uint8_t)(tmp*brightness);
+            tmp=powf((float)i/255,1/_gammag);
+            __red_map[i]=(uint8_t)(tmp*brightness);
+            tmp=powf((float)i/255,1/_gammag);
+            __white_map[i]=(uint8_t)(tmp*brightness);
            
         }
     }
