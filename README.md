@@ -137,7 +137,7 @@ uint8_t leds[4*NUM_LEDS];
  
  This function sets the default brightness for 0->255
  
-#### ' void setGamma(float gammar,float gammab,float gammag)` :
+#### `void setGamma(float gammar,float gammab,float gammag)` :
 This function allows you set the a gamma value per channel (you do not have to do this in your code anymore) more or less like the color correction of Fastled but using the gamma alogrithm
 
  #### `void setGamma(float gammar,float gammab,float gammag,float gammaw)`:
