@@ -148,6 +148,9 @@ uint8_t leds[4*NUM_LEDS];
  #### `showPixels()`:
  
  This function displays the pixels.
+
+ #### `showPixels(uint8_t *leds)`:
+ This function displays the pixels but you can change the led
  
  #### Examples:
  

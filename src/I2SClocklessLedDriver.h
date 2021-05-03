@@ -64,6 +64,22 @@ enum displayMode
     LOOP_INTERUPT,
 };
 
+struct LedTiming {
+    
+    //led timing
+    uint32_t T0;
+    uint32_t T1;
+    uint32_t T2;
+    
+    //compileled
+    uint8_t f1;
+    uint8_t f2;
+    uint8_t f3;
+
+
+
+};
+
 class I2SClocklessLedDriver
 {
 
@@ -442,6 +458,13 @@ public:
         *(++offset) = blue;
     }
 
+
+    void showPixels(uint8_t *newleds)
+    {
+        leds=newleds;
+        showPixels();
+    }
+    
     void showPixels()
     {
         if (leds == NULL)

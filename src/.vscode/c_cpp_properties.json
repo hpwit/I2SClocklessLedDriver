@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "Mac",
+            "defines": [
+                "ARDUINO=10800",
+                "USBCON"
+            ],
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/Users/yvesbazin/Documents/Arduino/tools/**",
+                "/Applications/Arduino.app/Contents/Java/libraries/**",
+                "/Users/yvesbazin/Documents/Arduino/hardware/espressif/esp32/**",
+                "${workspaceRoot}",
+                "/Applications/hardware/tools/**",
+                "/Applications/libraries/**",
+                "/Users/yvesbazin/Documents/Arduino/hardware/tools/**",
+                "/Users/yvesbazin/Documents/Arduino/libraries/**"
+            ],
+            "forcedInclude": [],
+            "intelliSenseMode": "clang-x64",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "compilerPath": "/usr/bin/clang"
+        }
+    ],
+    "version": 4
+}
