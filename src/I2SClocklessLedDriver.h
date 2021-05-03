@@ -461,10 +461,13 @@ public:
 
     void showPixels(uint8_t *newleds)
     {
+        uint8_t * tmp_leds;
+        tmp_leds=leds;
         leds=newleds;
         showPixels();
+        leds=tmp_leds;
     }
-    
+
     void showPixels()
     {
         if (leds == NULL)

@@ -137,6 +137,13 @@ uint8_t leds[4*NUM_LEDS];
  
  This function sets the default brightness for 0->255
  
+#### ' void setGamma(float gammar,float gammab,float gammag)` :
+This function allows you set the a gamma value per channel (you do not have to do this in your code anymore) more or less like the color correction of Fastled but using the gamma alogrithm
+
+ #### `void setGamma(float gammar,float gammab,float gammag,float gammaw)`:
+ Same as above only for RGBW leds
+
+
  #### `setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)`:
  Set the color of a pixel 
  
@@ -150,8 +157,30 @@ uint8_t leds[4*NUM_LEDS];
  This function displays the pixels.
 
  #### `showPixels(uint8_t *leds)`:
- This function displays the pixels but you can change the led
+This function allow set 'on the go' the pointer to the leds. This will help if you are using two buffers for your animation. 
+```C
+#define NUM_STRIPS 12
+ #define NUM_LED_PER_STRIP 256
  
+ #include "I2SClocklessLedDriver.h"
+
+ I2SClocklessLedDriver driver;
+uint8_t leds1[NUM_LEDS*3];
+uint8_t leds2[NUM_LEDS*3];
+
+int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
+
+//displyaing the leds in leds1
+driver.showPixels();
+
+//displaying the leds in leds2
+driver.showPixels(leds2);
+
+```
+Depending on your hardware setup you could use this to do hardware scrolling ...
+but I will need to work a bit more on that
+
  #### Examples:
  
 * `gettingstarted.ino`: an example to use 16 parallel strips of 256 leds 
