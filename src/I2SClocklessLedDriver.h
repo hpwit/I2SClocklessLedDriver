@@ -43,7 +43,7 @@ typedef union
 static const char *TAG = "I2SClocklessLedDriver";
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
-static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb);
+static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int startleds, int num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb);
 
 enum colorarrangment
 {
@@ -106,7 +106,22 @@ public:
     volatile xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
     volatile xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
     volatile xSemaphoreHandle I2SClocklessLedDriver_semDisp = NULL;
+    volatile int dmaBufferActive = 0;
+    volatile bool wait;
+    displayMode __displayMode;
+    volatile int ledToDisplay;
+    // volatile int oo=0;
+    uint8_t *leds;
+    uint8_t startleds;
+    int dmaBufferCount = 2; //we use two buffers
+    volatile bool transpose = false;
 
+    volatile int num_strips;
+    volatile int num_led_per_strip;
+    //int clock_pin;
+    int p_r, p_g, p_b;
+    int i2s_base_pin_index;
+    int nb_components;
     /*
      This flag is used when using the NO_WAIT modeÒÒ
      */
@@ -458,7 +473,27 @@ public:
         *(++offset) = blue;
     }
 
+/*
+Show pixel circular
+*/
+    void showPixels(uint8_t *new_leds,int offsett)
+    {
+        startleds=offsett;
+        showPixels(new_leds);
+        startleds=0;
+    }
 
+
+    void showPixels(int offsett)
+    {
+        startleds=offsett;
+        showPixels();
+        startleds=0;
+    }
+
+/*
+Show pixels classiques
+*/
     void showPixels(uint8_t *newleds)
     {
         uint8_t * tmp_leds;
@@ -482,7 +517,7 @@ public:
         DMABuffersTampon[2]->descriptor.qe.stqe_next = &(DMABuffersTampon[0]->descriptor);
         DMABuffersTampon[3]->descriptor.qe.stqe_next = 0;
         dmaBufferActive = 0;
-        loadAndTranspose(leds, num_led_per_strip, num_strips, (uint16_t *)DMABuffersTampon[0]->buffer, ledToDisplay, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
+        loadAndTranspose(leds, num_led_per_strip, startleds, num_strips, (uint16_t *)DMABuffersTampon[0]->buffer, ledToDisplay, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
 
         dmaBufferActive = 1;
         i2sStart(DMABuffersTampon[2]);
@@ -543,6 +578,7 @@ public:
         _gammar=1;
         _gammag=1;
         _gammaw=1;
+        startleds=0;
         setBrightness(255);
         dmaBufferCount=2;
         this->leds=leds;
@@ -555,21 +591,7 @@ public:
     }
 
     //private:
-    volatile int dmaBufferActive = 0;
-    volatile bool wait;
-    displayMode __displayMode;
-    volatile int ledToDisplay;
-    // volatile int oo=0;
-    uint8_t *leds;
-    int dmaBufferCount = 2; //we use two buffers
-    volatile bool transpose = false;
 
-    volatile int num_strips;
-    volatile int num_led_per_strip;
-    //int clock_pin;
-    int p_r, p_g, p_b;
-    int i2s_base_pin_index;
-    int nb_components;
 
     // intr_handle_t I2SClocklessLedDriver_intr_handle;// = NULL;
     //    xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
@@ -757,7 +779,7 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
             cont->ledToDisplay++;
             if (cont->ledToDisplay < cont->num_led_per_strip)
             {
-                loadAndTranspose(cont->leds, cont->num_led_per_strip, cont->num_strips, (uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->__green_map, cont->__red_map, cont->__blue_map, cont->__white_map, cont->nb_components, cont->p_g, cont->p_r, cont->p_b);
+                loadAndTranspose(cont->leds, cont->num_led_per_strip, cont->startleds,cont->num_strips, (uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->__green_map, cont->__red_map, cont->__blue_map, cont->__white_map, cont->nb_components, cont->p_g, cont->p_r, cont->p_b);
                 if (cont->ledToDisplay == cont->num_led_per_strip - 3) //here it's not -1 because it takes time top have the change into account and it reread the buufer
                 {
                     cont->DMABuffersTampon[cont->dmaBufferActive]->descriptor.qe.stqe_next = &(cont->DMABuffersTampon[3]->descriptor);
@@ -862,11 +884,12 @@ static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B)
     *((uint16_t *)(B + 23)) = (uint16_t)((y & 0xff) | ((y1 & 0xff) << 8));
 }
 
-static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb)
+static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int startleds,int num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb)
 {
     Lines secondPixel[nbcomponents];
 
-    uint8_t *poli = ledt + ledtodisp * nbcomponents;
+
+    uint8_t *poli = ledt + ((ledtodisp+startleds)%led_per_strip) * nbcomponents;
     for (int i = 0; i < num_stripst; i++)
     {
 

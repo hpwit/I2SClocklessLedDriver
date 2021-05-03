@@ -181,11 +181,22 @@ driver.showPixels(leds2);
 Depending on your hardware setup you could use this to do hardware scrolling ...
 but I will need to work a bit more on that
 
+#### `showPixels(int offset)`:
+This function displays the leds with an offset in a circular buffer. Was it clear ? maybe not :); Let's say that you have N leds.
+If you write showPixels(M), the first led displayed will be the led M.then M+1,M+2,... N and then 0,1,2,M-1.
+If M is negative it will start from led N-1 ,N,0,1,2,....,N-2.
+This function can help you scroll your leds without doing a mem copy.
+
+#### `showPixels(uint8_t * leds,int offset)`:
+Same function as before, where you can set the led buffer you want to display.
+
+
  #### Examples:
  
 * `gettingstarted.ino`: an example to use 16 parallel strips of 256 leds 
 * `gettingstartedFastLED.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects 
 * `gettingstartedRGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
+* `snakewithhardwarescroll.ino`: an example of use of the circular showPixel(int offset) to do the snake
 
 
 ## Artifacts, DMA, second core, transposition, ...
