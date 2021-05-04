@@ -158,6 +158,7 @@ This function allows you set the a gamma value per channel (you do not have to d
 
  #### `showPixels(uint8_t *leds)`:
 This function allow set 'on the go' the pointer to the leds. This will help if you are using two buffers for your animation. 
+It can also be used to ease dithering see example `Dithering` (I need to work on a hardware implementation btw)
 ```C
 #define NUM_STRIPS 12
  #define NUM_LED_PER_STRIP 256
@@ -197,6 +198,7 @@ Same function as before, where you can set the led buffer you want to display.
 * `gettingstartedFastLED.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects 
 * `gettingstartedRGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
 * `snakewithhardwarescroll.ino`: an example of use of the circular showPixel(int offset) to do the snake
+* `Dithering`; how to use the showPixels(uint8_t *leds) to easly do dithering (just an example)
 
 
 ## Artifacts, DMA, second core, transposition, ...
