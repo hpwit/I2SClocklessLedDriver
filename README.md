@@ -146,8 +146,15 @@ This function allows you set the a gamma value per channel (you do not have to d
 
  #### `setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)`:
  Set the color of a pixel 
- 
+ NB1: if you are using a RGBW led, this function will do and RGB->RGBW transformation with the following algotithm thanks to  @Jonathanese 
+```C
+W = min(R, G, B);
+R = R - W; 
+G = G - W;
+B = B - W;
+```
  NB: if you are familiar with FastLED it would be `leds[pos]=CRGB(red,green,blue)` as you will see in the examples
+
  
  #### `setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue,uint8_t white)`:
  Set the color of a pixel for RGBW strips

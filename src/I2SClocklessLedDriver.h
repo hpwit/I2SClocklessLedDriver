@@ -452,7 +452,17 @@ public:
 
     void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)
     {
-        setPixelinBuffer(pos, red, green, blue, 0);
+        uint8_t W=0;
+        if(nb_components>3)
+        {
+            W = MIN(red, green);
+            W = MIN(W, blue);
+            red = red - W; 
+            green = green - W;
+            blue = blue - W;
+        }
+    
+        setPixelinBuffer(pos, red, green, blue, W);
     }
 
     void initled(int *Pinsq, int num_strips, int num_led_per_strip, colorarrangment cArr)
@@ -486,7 +496,7 @@ public:
         else
         {
             /*
-                Code to transform RBG into RGBW thanks to @Jonathanese
+                Code to transform RBG into RGBW thanks to @Jonathanese https://github.com/Jonathanese/NodeMCUPoleDriver/blob/master/LED_Framework.cpp
             */
             uint8_t W = MIN(red, green);
             W = MIN(W, blue);
