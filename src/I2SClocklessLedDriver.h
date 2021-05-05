@@ -27,12 +27,19 @@
 #define NUMSTRIPS 16
 #endif
 
+#ifndef SNAKEPATTERN
+#define SNAKEPATTERN 1
+#endif
+
 #define I2S_DEVICE 0
 
 #define AA (0x00AA00AAL)
 #define CC (0x0000CCCCL)
 #define FF (0xF0F0F0F0L)
 #define FF2 (0x0F0F0F0FL)
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
 typedef union
 {
     uint8_t bytes[16];
@@ -43,7 +50,7 @@ typedef union
 static const char *TAG = "I2SClocklessLedDriver";
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
-static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int startleds, int num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb);
+static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int startleds, int num_stripst,int line_width, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb);
 
 enum colorarrangment
 {
@@ -113,6 +120,7 @@ public:
     // volatile int oo=0;
     uint8_t *leds;
     uint8_t startleds;
+    int linewidth;
     int dmaBufferCount = 2; //we use two buffers
     volatile bool transpose = false;
 
@@ -467,11 +475,46 @@ public:
 
     void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)
     {
-        uint8_t *offset = leds + (pos << 1) + pos;
-        *(offset) = red;
-        *(++offset) = green;
-        *(++offset) = blue;
+
+        if(nb_components==3)
+        {
+            uint8_t *offset = leds + (pos << 1) + pos;
+            *(offset) = red;
+            *(++offset) = green;
+            *(++offset) = blue;
+        }
+        else
+        {
+            /*
+                Code to transform RBG into RGBW thanks to @Jonathanese
+            */
+            uint8_t W = MIN(red, green);
+            W = MIN(W, blue);
+            red = red - W; 
+            green = green - W;
+            blue = blue - W;
+            setPixel(pos,red,green,blue,W);
+        }
     }
+
+/* hardware scroll
+
+*/
+
+ void showPixels(uint8_t *new_leds,int offsett,int line)
+{
+    linewidth=line;
+    showPixels(new_leds,offsett);
+    linewidth=num_led_per_strip;
+}
+ 
+ void showPixels(int offsett,int line)
+ {
+    linewidth=line;
+    showPixels(offsett);
+    linewidth=num_led_per_strip;
+ }
+
 
 /*
 Show pixel circular
@@ -517,7 +560,7 @@ Show pixels classiques
         DMABuffersTampon[2]->descriptor.qe.stqe_next = &(DMABuffersTampon[0]->descriptor);
         DMABuffersTampon[3]->descriptor.qe.stqe_next = 0;
         dmaBufferActive = 0;
-        loadAndTranspose(leds, num_led_per_strip, startleds, num_strips, (uint16_t *)DMABuffersTampon[0]->buffer, ledToDisplay, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
+        loadAndTranspose(leds, num_led_per_strip, startleds, num_strips, linewidth,(uint16_t *)DMABuffersTampon[0]->buffer, ledToDisplay, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
 
         dmaBufferActive = 1;
         i2sStart(DMABuffersTampon[2]);
@@ -579,10 +622,12 @@ Show pixels classiques
         _gammag=1;
         _gammaw=1;
         startleds=0;
+       
         setBrightness(255);
         dmaBufferCount=2;
         this->leds=leds;
         this->num_led_per_strip=num_led_per_strip;
+         linewidth=num_led_per_strip;
         this->num_strips=num_strips;
         this->dmaBufferCount=dmaBufferCount;
         setPins(Pinsq);
@@ -779,7 +824,7 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
             cont->ledToDisplay++;
             if (cont->ledToDisplay < cont->num_led_per_strip)
             {
-                loadAndTranspose(cont->leds, cont->num_led_per_strip, cont->startleds,cont->num_strips, (uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->__green_map, cont->__red_map, cont->__blue_map, cont->__white_map, cont->nb_components, cont->p_g, cont->p_r, cont->p_b);
+                loadAndTranspose(cont->leds, cont->num_led_per_strip, cont->startleds,cont->num_strips, cont->linewidth,(uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->__green_map, cont->__red_map, cont->__blue_map, cont->__white_map, cont->nb_components, cont->p_g, cont->p_r, cont->p_b);
                 if (cont->ledToDisplay == cont->num_led_per_strip - 3) //here it's not -1 because it takes time top have the change into account and it reread the buufer
                 {
                     cont->DMABuffersTampon[cont->dmaBufferActive]->descriptor.qe.stqe_next = &(cont->DMABuffersTampon[3]->descriptor);
@@ -884,12 +929,31 @@ static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B)
     *((uint16_t *)(B + 23)) = (uint16_t)((y & 0xff) | ((y1 & 0xff) << 8));
 }
 
-static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int startleds,int num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb)
+static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int startleds,int num_stripst,int line_width, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pg, int pr, int pb)
 {
     Lines secondPixel[nbcomponents];
 
+    uint32_t off,x,y;
+    y=ledtodisp/line_width;
+#if SNAKEPATTERN == 1
+    if(y%2 == 0)
+    {
+        x=ledtodisp%line_width;
+        off=((x+startleds)%line_width)+y*line_width;
+    }
+    else
+    {
+        x=ledtodisp%line_width;
+        off=(x-startleds)%line_width+y*line_width;
+    }
+#else
+        x=ledtodisp%line_width;
+        off=((x+startleds)%line_width)+y*line_width;
+#endif
 
-    uint8_t *poli = ledt + ((ledtodisp+startleds)%led_per_strip) * nbcomponents;
+   // uint8_t *poli = ledt + ((ledtodisp+startleds)%led_per_strip) * nbcomponents;
+
+uint8_t *poli = ledt + off * nbcomponents;
     for (int i = 0; i < num_stripst; i++)
     {
 
