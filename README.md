@@ -192,7 +192,7 @@ Old term for a nice trick. The idea is to do a remapping of the leds within the 
 Let's say that I want to 'scroll' by 5 pixels all the leds. Normally you would move leds 4->N-1 into 0,N-5 and then copy led 0=>led N-4 act. and then do the fastled.show().
 The way I do it is to push within the driver led 4,5,6,7, ...., N-1,0,1,2,3 by calculating each time which pixels needs to be displayed using a simple algorithm about something along this `lednumber=> (lednumber+scroll)%N` (then a bit more complicated to take into account snake arrangement or not ,...)
 
-#### `OffDisplay` object:
+#### `OffsetDisplay` object:
 ```C
 struct OffsetDisplay
 {
@@ -210,10 +210,13 @@ In the example `snakewithhardwarescroll.ino` each strip is treated as 'individua
 To be able to 'hardware scroll' in all directions you need to define how you panel is setup.
 for instance if you have a panel 100 leds wide 20 leds height `panel_height=20` and `panel_witdh=100`.
 If you are using mutilple strips you have two parameters 
-NB: these parameters need to be put before `#include "I2SClocklessLedDriver.h"` 
+NB: these parameters need to be put before `#include "I2SClocklessLedDriver.h"` :
+
+`SNAKEPATTERN`
 * `#define SNAKEPATTERN 0` if your strip are not in snake pattern.
 * `#define SNAKEPATTERN 1` if your strip are arange in snake pattern **this is the default you do not need to put it in your program**
 
+`ALTERNATEPATTERN`
 * `#define ALTERNATEPATTERN 0` if the all the strip start on the same side
 * `#define ALTERNATEPATTERN 1` if the all the strip start on alternate side  **this is the default you do not need to put it in your program**
 
