@@ -186,26 +186,56 @@ driver.showPixels();
 driver.showPixels(leds2);
 
 ```
-Depending on your hardware setup you could use this to do hardware scrolling ...
-but I will need to work a bit more on that
 
-#### `showPixels(int offset)`:
-This function displays the leds with an offset in a circular buffer. Was it clear ? maybe not :); Let's say that you have N leds.
-If you write showPixels(M), the first led displayed will be the led M.then M+1,M+2,... N and then 0,1,2,M-1.
-If M is negative it will start from led N-1 ,N,0,1,2,....,N-2.
+### 'HARDWARE SCROLLING'
+Old term for a nice trick. The idea is to do a remapping of the leds within the driver directly so that the leds are displayed in another order. Pixels are pushed one at a time, and the normal way to do it is by going led 0,1,2,3 ....,N
+Let's say that I want to 'scroll' by 5 pixels all the leds. Normally you would move leds 4->N-1 into 0,N-5 and then copy led 0=>led N-4 act. and then do the fastled.show().
+The way I do it is to push within the driver led 4,5,6,7, ...., N-1,0,1,2,3 by calculating each time which pixels needs to be displayed using a simple algorithm about something along this `lednumber=> (lednumber+scroll)%N` (then a bit more complicated to take into account snake arrangement or not ,...)
+
+#### `OffDisplay` object:
+```C
+struct OffsetDisplay
+{
+    int offsetx;
+    int offsety;
+    int panel_height;
+    int panel_width;
+};
+```
+At the initiation of the leds a default Offdisplay is created with certain values. You can get this default object with `getDefaultOffset();`.
+
+In the example `snakewithhardwarescroll.ino` each strip is treated as 'individual' and each snake will go around a single strip
+
+#### Defining a panel
+To be able to 'hardware scroll' in all directions you need to define how you panel is setup.
+for instance if you have a panel 100 leds wide 20 leds height `panel_height=20` and `panel_witdh=100`.
+If you are using mutilple strips you have two parameters 
+NB: these parameters need to be put before `#include "I2SClocklessLedDriver.h"` 
+`#define SNAKEPATTERN 0` if your strip are not in snake pattern.
+`#define SNAKEPATTERN 1` if your strip are arange in snake pattern **this is the default you do not need to put it in your program**
+
+`#define ALTERNATEPATTERN 0` if the all the strip start on the same side
+`#define ALTERNATEPATTERN 1` if the all the strip start on alternate side  **this is the default you do not need to put it in your program**
+
+
+#### `showPixels(OffDisplay offset)`:
 This function can help you scroll your leds without doing a mem copy.
 
-#### `showPixels(uint8_t * leds,int offset)`:
+#### `showPixels(uint8_t * leds,OffDisplay offset)`:
 Same function as before, where you can set the led buffer you want to display.
 
+#### Is it reallly needed ?
+Maybe not but fun (humm maybe not that fun lol) to make but great results.
 
  #### Examples:
  
 * `gettingstarted.ino`: an example to use 16 parallel strips of 256 leds 
 * `gettingstartedFastLED.ino`: an example to use 16 parallel strips of 256 leds using FastLED objects 
 * `gettingstartedRGBW.ino`: an example to use 16 parallel strips of 256 leds of RGBW leds
-* `snakewithhardwarescroll.ino`: an example of use of the circular showPixel(int offset) to do the snake
 * `Dithering`; how to use the showPixels(uint8_t *leds) to easly do dithering (just an example)
+* `snakewithhardwarescroll.ino`: an example of use of the showPixel(OffsetDisplay offset) to do the snake
+* `panelhardwarescroll.ino`: an example of hardware scrolling x and y direction
+
 
 
 ## Artifacts, DMA, second core, transposition, ...

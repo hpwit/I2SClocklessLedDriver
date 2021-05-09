@@ -1,13 +1,10 @@
-#define ALTERNATEPATTERN 0
 #include "FastLED.h"
 #include "I2SClocklessLedDriver.h"
-#define ledsperstrip 256
+#define ledsperstrip 360 //each strip will make 3 rows hence each row will be 120 leds wide
 #define numstrips 16
-//here we have 3 colors per pixel
-//uint8_t leds[numstrips*ledsperstrip*3];
-//this one below is same as the one above
+//hence the total height of the panel will be 16*3 =48 and the width =120
 
-//each strip will have a snake of size the equials the strimnumber
+
 CRGB leds[numstrips * ledsperstrip];
 
 
@@ -33,9 +30,9 @@ void setup()
   driver.showPixels();
   delay(1000); 
   offd = driver.getDefaultOffset();
-  //uncomment the lines if you want all the strips considered as a big one.
-  //offd.panel_width=ledsperstrip*numstrips; 
-  //offd.panel_height=1;
+  offd.panel_width=120; 
+  offd.panel_height=48;
+
 
 }
 
@@ -43,8 +40,9 @@ int off = 0;
 long time1, time2, time3;
 void loop()
 {
-  //going forward
-  offd.offsetx = -off;
+  
+  offd.offsetx = 120*cos(3.14*off/360);
+  offd.offsety = 120*sin(3.14*off/360);
   time2 = ESP.getCycleCount();
   driver.showPixels(offd); 
   time3 = ESP.getCycleCount();
