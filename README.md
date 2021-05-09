@@ -211,11 +211,11 @@ To be able to 'hardware scroll' in all directions you need to define how you pan
 for instance if you have a panel 100 leds wide 20 leds height `panel_height=20` and `panel_witdh=100`.
 If you are using mutilple strips you have two parameters 
 NB: these parameters need to be put before `#include "I2SClocklessLedDriver.h"` 
-`#define SNAKEPATTERN 0` if your strip are not in snake pattern.
-`#define SNAKEPATTERN 1` if your strip are arange in snake pattern **this is the default you do not need to put it in your program**
+* `#define SNAKEPATTERN 0` if your strip are not in snake pattern.
+* `#define SNAKEPATTERN 1` if your strip are arange in snake pattern **this is the default you do not need to put it in your program**
 
-`#define ALTERNATEPATTERN 0` if the all the strip start on the same side
-`#define ALTERNATEPATTERN 1` if the all the strip start on alternate side  **this is the default you do not need to put it in your program**
+* `#define ALTERNATEPATTERN 0` if the all the strip start on the same side
+* `#define ALTERNATEPATTERN 1` if the all the strip start on alternate side  **this is the default you do not need to put it in your program**
 
 
 #### `showPixels(OffDisplay offset)`:
