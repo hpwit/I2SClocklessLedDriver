@@ -1,9 +1,9 @@
 #include "I2SClocklessLedDriver.h"
 
-#define ledsperstrip 256
-#define numstrips 16
+#define NUM_LEDS_PER_STRIP 256
+#define NUMSTRIPS 16
 //here we have 4 colors per pixel
-uint8_t leds[numstrips*ledsperstrip*4];
+uint8_t leds[NUMSTRIPS*NUM_LEDS_PER_STRIP*4];
 
 int pins[16]={0,2,4,5,12,13,14,15,16,18,19,21,22,23,25,26};
 
@@ -11,7 +11,7 @@ I2SClocklessLedDriver driver;
 void setup() {
     Serial.begin(115200);
     
-    driver.initled(leds,pins,numstrips,ledsperstrip,ORDER_GRBW);
+    driver.initled(leds,pins,NUMSTRIPS,NUM_LEDS_PER_STRIP,ORDER_GRBW);
     driver.setBrightness(10);
     
 }
@@ -20,13 +20,13 @@ int off=0;
 long time1,time2,time3;
 void loop() {
     time1=ESP.getCycleCount();
-    for(int j=0;j<numstrips;j++)
+    for(int j=0;j<NUMSTRIPS;j++)
     {
         
-        for(int i=0;i<ledsperstrip;i++)
+        for(int i=0;i<NUM_LEDS_PER_STRIP;i++)
         {
             
-            driver.setPixel((i+off)%ledsperstrip+ledsperstrip*j,255-i,i,((128-i)+255)%255,i/25);
+            driver.setPixel((i+off)%NUM_LEDS_PER_STRIP+NUM_LEDS_PER_STRIP*j,255-i,i,((128-i)+255)%255,i/25);
             
         }
     }

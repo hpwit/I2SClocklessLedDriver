@@ -44,6 +44,14 @@
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
+#ifndef HARDWARESPRITES
+#define HARDWARESPRITES 0
+#endif
+
+#if HARDWARESPRITES == 1
+#include "hardwareSprite.h"
+#endif
+
 typedef union
 {
     uint8_t bytes[16];
@@ -84,7 +92,7 @@ enum displayMode
 
 int MOD(int a, int b)
 {
-   /* if (b == 1)
+    /* if (b == 1)
     {
         if (a < 0)
             return -a;
@@ -376,6 +384,30 @@ public:
         }
     }
 
+
+    void showPixelsFirstTranspose(OffsetDisplay offdisp)
+    {
+        _offsetDisplay = offdisp;
+        showPixelsFirstTranspose();
+        _offsetDisplay = _defaultOffsetDisplay;
+    }
+    
+    void showPixelsFirstTranspose(OffsetDisplay offdisp,uint8_t * temp_leds)
+    {
+        _offsetDisplay = offdisp;
+        showPixelsFirstTranspose(temp_leds);
+        _offsetDisplay = _defaultOffsetDisplay;
+    }
+
+    void showPixelsFirstTranspose(uint8_t *new_leds)
+    {
+        uint8_t *tmp_leds;
+        tmp_leds = leds;
+        leds = new_leds;
+        showPixelsFirstTranspose();
+        leds = tmp_leds;
+    }
+
     void showPixelsFirstTranpose()
     {
         showPixelsFirstTranpose(NO_WAIT);
@@ -394,7 +426,7 @@ public:
     void transposeAll()
     {
         ledToDisplay = 0;
-        Lines secondPixel[nb_components];
+        /*Lines secondPixel[nb_components];
         for (int j = 0; j < num_led_per_strip; j++)
         {
             uint8_t *poli = leds + ledToDisplay * nb_components;
@@ -415,6 +447,10 @@ public:
             transpose16x1_noinline2(secondPixel[2].bytes, (uint16_t *)DMABuffersTransposed[j + 1]->buffer + 2 * 3 * 8);
             if (nb_components > 3)
                 transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t *)DMABuffersTransposed[j + 1]->buffer + 3 * 3 * 8);
+        }*/
+        for (int j = 0; j < num_led_per_strip; j++)
+        {
+            loadAndTranspose(leds, num_led_per_strip, num_strips, _offsetDisplay, DMABuffersTransposed[j + 1]->buffer, j, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
         }
     }
 
@@ -591,6 +627,14 @@ Show pixels classiques
 
     void showPixels()
     {
+
+        #if HARDWARESPRITES == 1
+        memset(target, 0, num_led_per_strip * num_strips  * 2);
+        for (int i = 0; i < 8; i++)
+        {
+            sprites[i].reorder(_offsetDisplay.panel_width, _offsetDisplay.panel_height);
+        }
+#endif
         if (leds == NULL)
         {
             ESP_LOGE(TAG, "no leds buffer defined");
@@ -665,7 +709,10 @@ Show pixels classiques
         _gammag = 1;
         _gammaw = 1;
         startleds = 0;
-
+#if HARDWARESPRITES == 1
+        //Serial.println(NUM_LEDS_PER_STRIP * NBIS2SERIALPINS * 8);
+        target = (uint16_t *)malloc(num_led_per_strip * num_strips * 2 + 2);
+#endif
         setBrightness(255);
         dmaBufferCount = 2;
         this->leds = leds;
@@ -980,11 +1027,15 @@ static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int num
 {
     Lines secondPixel[nbcomponents];
 
-    uint32_t offp, offi;
-    int x, y;
+    uint32_t offp, offi, offsetled;
+    uint8_t _g, _r, _b;
+    int x, y, X, Y, deltaY;
+    deltaY = led_per_strip / offdisp.panel_width; //calculation of height per strip
     //printf("li%d:\n",line_width);
     y = ledtodisp / offdisp.panel_width;
     x = ledtodisp % offdisp.panel_width;
+    Y = y;
+    X = x;
 #if SNAKEPATTERN == 1
 
     //move in y
@@ -1025,10 +1076,10 @@ static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int num
 #else
     //x = ledtodisp % offdisp.panel_width;
     offi = ((x + offdisp.offsetx) % offdisp.panel_width) + y * offdisp.panel_width;
-    #if ALTERNATEPATTERN == 1
-        offp = MOD(x - offdisp.offsetx, offdisp.panel_width) + y * offdisp.panel_width;
+#if ALTERNATEPATTERN == 1
+    offp = MOD(x - offdisp.offsetx, offdisp.panel_width) + y * offdisp.panel_width;
 #else
-        offp = offi;
+    offp = offi;
 #endif
 #endif
 
@@ -1036,6 +1087,7 @@ static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int num
     offi = offi * nbcomponents;
     offp = offp * nbcomponents;
     uint8_t *poli = ledt + offi;
+    offsetled = ledtodisp;
     for (int i = 0; i < num_stripst; i++)
     {
 
@@ -1049,16 +1101,43 @@ static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int led_per_strip, int num
             if (poli < ledt)
             {
                 //Serial.printf("neg %d %d %d\n",i,ledtodisp,(ledt-poli)/3);
-                poli +=  (uint32_t)offdisp.panel_width * offdisp.panel_height * nbcomponents ;
+                poli += (uint32_t)offdisp.panel_width * offdisp.panel_height * nbcomponents;
             }
         }
-        secondPixel[pg].bytes[i] = mapg[*(poli + 1)];
-        secondPixel[pr].bytes[i] = mapr[*(poli + 0)];
-        secondPixel[pb].bytes[i] = mapb[*(poli + 2)];
+        /*
+            
+        */
+#if HARDWARESPRITES == 1
+        //res re=RE(offsetled);
+        if (target[offsetled] == 0)
+        {
+            _g = *(poli + 1);
+            _r = *(poli);
+            _b = *(poli + 2);
+        }
+        else
+        {
+            _g = _spritesleds[target[offsetled] - 1 + 1];
+            _r = _spritesleds[target[offsetled] - 1];
+            _b = _spritesleds[target[offsetled] - 1 + 2];
+        }
+#else
+        _g = *(poli + 1);
+        _r = *(poli);
+        _b = *(poli + 2);
+#endif
+
+        secondPixel[pg].bytes[i] = mapg[_g];
+        secondPixel[pr].bytes[i] = mapr[_r];
+        secondPixel[pb].bytes[i] = mapb[_b];
         if (nbcomponents > 3)
             secondPixel[3].bytes[i] = mapw[*(poli + 3)];
 
         poli += led_per_strip * nbcomponents;
+#if HARDWARESPRITES == 1
+        offsetled += led_per_strip;
+#endif
+        Y += deltaY;
 
         if (i % 2 == 0)
         {

@@ -1,14 +1,14 @@
 #define ALTERNATEPATTERN 0
 #include "FastLED.h"
 #include "I2SClocklessLedDriver.h"
-#define ledsperstrip 256
-#define numstrips 16
+#define NUM_LEDS_PER_STRIP 256
+#define NUMSTRIPS 16
 //here we have 3 colors per pixel
 //uint8_t leds[numstrips*ledsperstrip*3];
 //this one below is same as the one above
 
 //each strip will have a snake of size the equials the strimnumber
-CRGB leds[numstrips * ledsperstrip];
+CRGB leds[NUMSTRIPS * NUM_LEDS_PER_STRIP];
 
 
 int pins[16] = {0, 2, 4, 5, 12, 13, 14, 15, 16, 18, 19, 21, 22, 23, 25, 26};
@@ -19,16 +19,16 @@ void setup()
 {
   Serial.begin(115200);
 
-  driver.initled((uint8_t *)leds, pins, numstrips, ledsperstrip, ORDER_GRB);
+  driver.initled((uint8_t *)leds, pins, numstrips, NUM_LEDS_PER_STRIP, ORDER_GRB);
   driver.setBrightness(20);
-  for (int j = 0; j < numstrips; j++)
+  for (int j = 0; j < NUMSTRIPS; j++)
   {
-     leds[ledsperstrip * j] = CRGB::Red;
+     leds[NUM_LEDS_PER_STRIP * j] = CRGB::Red;
     for (int i = 1; i < j + 2; i++)
     {
-      leds[i + ledsperstrip * j] = CRGB::Green;
+      leds[i + NUM_LEDS_PER_STRIP * j] = CRGB::Green;
     }
-    leds[17+ledsperstrip * j] = CRGB::Blue;
+    leds[17+NUM_LEDS_PER_STRIP * j] = CRGB::Blue;
   }
   driver.showPixels();
   delay(1000); 

@@ -67,6 +67,8 @@ We are declaring that my `leds` array represent 4 strips of `NUM_LED_PER_STRIPS`
 ### First let's declare a new driver
 
 ```C
+#include NUMSTRIPS x
+#include NUM_LEDS_PER_STRIP y
 #include "I2SClocklessLedDriver.h"
 
 I2SClocklessLedDriver driver;
@@ -90,7 +92,7 @@ uint8_t leds[4*NUM_LEDS];
 ```
 
 ### Driver functions
-#### `initled(uint8_t *leds,int * Pins,int num_strips,int num_led_per_strip,colorarrangment cArr)`:
+#### `initled(uint8_t *leds,int * Pins,int NUMSTRIPS,int num_led_per_strip,colorarrangment cArr)`:
 
  This function initialize the strips.
 * `*leds`: a pointer to the leds array
@@ -108,7 +110,7 @@ uint8_t leds[4*NUM_LEDS];
  
  example 4: declaring 12 strips of 256 leds in GRB 
  ```C
- #define NUM_STRIPS 12
+ #define NUMSTRIPS 12
  #define NUM_LEDS_PER_STRIP 256
  
  #include "I2SClocklessLedDriver.h"
@@ -122,16 +124,16 @@ uint8_t leds[4*NUM_LEDS];
  
  example 5: declaring 12 strips of 256 leds in RGBW
  ```C
- #define NUM_STRIPS 12
+ #define NUMSTRIPS 12
  #define NUM_LED_PER_STRIP 256
  
  #include "I2SClocklessLedDriver.h"
 
  I2SClocklessLedDriver driver;
  
- uint8_t leds[4*NUM_STRIPS*NUM_LED_PER_STRIP]; 
- int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
- driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
+ uint8_t leds[4*NUMSTRIPS*NUM_LED_PER_STRIP]; 
+ int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+ driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
  ```
  #### `setBrightness(int brightness)`:
  
@@ -167,7 +169,7 @@ B = B - W;
 This function allow set 'on the go' the pointer to the leds. This will help if you are using two buffers for your animation. 
 It can also be used to ease dithering see example `Dithering` (I need to work on a hardware implementation btw)
 ```C
-#define NUM_STRIPS 12
+#define NUMSTRIPS 12
  #define NUM_LED_PER_STRIP 256
  
  #include "I2SClocklessLedDriver.h"
@@ -176,8 +178,8 @@ It can also be used to ease dithering see example `Dithering` (I need to work on
 uint8_t leds1[NUM_LEDS*3];
 uint8_t leds2[NUM_LEDS*3];
 
-int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
-driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
+int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
 
 //displyaing the leds in leds1
 driver.showPixels();
@@ -278,7 +280,7 @@ The driver whatever the number of strips, sends 16 bits (2 bytes ) to the I2S at
 
 The operation that loads the leds of each strips in serie and move it in parallel is called transposition.
 
-As a consequence the size of the big DMA buffer is only link to the `NUM_LED_PER_STRIP` and not the `NUM_STRIPS`. For instance a DMA buffer for 4 strips of 256 leds will be of the same size of 16 strips of 256 leds.
+As a consequence the size of the big DMA buffer is only link to the `NUM_LED_PER_STRIP` and not the `NUMSTRIPS`. For instance a DMA buffer for 4 strips of 256 leds will be of the same size of 16 strips of 256 leds.
 
 ### OK I have enough memory and what else ?
 For most of your usage you will have enough memory. Hence the big buffer can be created allowing some new stuff
@@ -290,16 +292,16 @@ Normally to speed up things, you may program your animation on one core and disp
 ```c
 #define FULL_DMA_BUFFER //this will enable the full dma buffer
 
-#define NUM_STRIPS 12
+#define NUMSTRIPS 12
 #define NUM_LED_PER_STRIP 256
 
 #include "I2SClocklessLedDriver.h"
 
 I2SClocklessLedDriver driver;
 
-uint8_t leds[4*NUM_STRIPS*NUM_LED_PER_STRIP]; 
-int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
-driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
+uint8_t leds[4*NUMSTRIPS*NUM_LED_PER_STRIP]; 
+int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
 
 ```
 Now three new functions are available
@@ -332,6 +334,15 @@ showPixelsFirstTranpose();
 
 Example: `FullBufferFastLED.ino` this example is the equivalent of  `gettingstartedFastLED.ino` but using the buffer. It can be noticed that the overall fps is now higher. 
 
+### `void showPixelsFirstTranspose(uint8_t *new_leds)`
+This function is equivalent to `showPixels(uint8_t *new_leds)`
+
+### `void showPixelsFirstTranspose(OffsetDisplay offdisp)`
+This function is equivalent to `showPixels(OffsetDisplay offdisp)`
+
+### `void showPixelsFirstTranspose(OffsetDisplay offdisp,uint8_t * temp_leds)`
+This function is equivalent to `showPixels((OffsetDisplay offdisp,uint8_t * temp_leds)`
+
 #### `setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue)`
 This function put a pixel directly in the DMA buffer doing the transposition for RGB leds
 
@@ -340,6 +351,7 @@ This function put a pixel directly in the DMA buffer doing the transposition for
 This function put a pixel directly in the DMA buffer doing the transposition for RGBW leds
 
 **If you are using these two functions and use `showPixelsFirstTranpose()` it will not work as this function will erase the DMA buffer while transposing the entire led buffer**
+**When using the setPixelinBuffer functions the offsetdisplay are not taken, into account**
 
 To display the content of the DMA buffer directly use
 
