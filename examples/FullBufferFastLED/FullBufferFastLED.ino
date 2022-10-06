@@ -34,7 +34,7 @@ void loop() {
         }
     }
     time2=ESP.getCycleCount();
-    driver.showPixelsFirstTranpose();
+    driver.showPixelsFirstTranspose();
     time3=ESP.getCycleCount();
     Serial.printf("Calcul pixel fps:%.2f   showPixels fps:%.2f   Total fps:%.2f \n",(float)240000000/(time2-time1),(float)240000000/(time3-time2),(float)240000000/(time3-time1));
     off++;

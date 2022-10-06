@@ -306,7 +306,7 @@ driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
 ```
 Now three new functions are available
 
-#### `showPixelsFirstTranpose()` 
+#### `showPixelsFirstTranspose()` 
 This function will transpose the entire led array and the display it. Has this function as en async function when lauching twice it will wait for the first one the finish
 
 **It's like you are running it on a second core without using it**
