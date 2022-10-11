@@ -54,6 +54,9 @@
 
 
 
+#include "pixeltypes.h"
+
+
 typedef union
 {
     uint8_t bytes[16];
@@ -647,7 +650,7 @@ Show pixels classiques
         {
             sprites[i].reorder(_offsetDisplay.panel_width, _offsetDisplay.panel_height);
         }
-#endif
+        #endif
         if (leds == NULL)
         {
             ESP_LOGE(TAG, "no leds buffer defined");
@@ -672,6 +675,16 @@ Show pixels classiques
         xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
     }
 
+
+    Pixel * strip(int stripNum)
+    {
+        Pixel * l =(Pixel *)leds;
+        for(int i=0;i< (stripNum % num_strips);i++)
+        {
+            l=l+stripSize[i];
+        }
+        return l;
+    }
 
     int maxLength(int *sizes,int num_strips)
     {
