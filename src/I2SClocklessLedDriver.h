@@ -243,6 +243,7 @@ public:
     volatile bool isDisplaying = false;
     volatile bool isWaiting = true;
     volatile bool framesync = false;
+    volatile bool wasWaitingtofinish = false;
     volatile int counti;
 
     I2SClocklessLedDriver(){};
@@ -494,6 +495,7 @@ public:
         }
         if (__displayMode == NO_WAIT && isDisplaying == true)
         {
+            if(I2SClocklessLedDriver_semDisp==NULL)
          I2SClocklessLedDriver_semDisp= xSemaphoreCreateBinary();
           xSemaphoreTake(I2SClocklessLedDriver_semDisp, portMAX_DELAY);
 
@@ -744,8 +746,8 @@ Show pixels classiques
     {
        // uint8_t *tmp_leds;
         //tmp_leds = leds;
-        leds = newleds;
-        showPixels();
+       // leds = newleds;
+        showPixels(WAIT,newleds);
      //   leds = tmp_leds;
     }
 
@@ -759,6 +761,17 @@ Show pixels classiques
     {
         //uint8_t *tmp_leds;
         //tmp_leds = leds;
+         if(isDisplaying == true and __displayMode==NO_WAIT)
+         {
+            //printf("dejà en cours on attend\n");
+            //long t1=ESP.getCycleCount();
+            wasWaitingtofinish = true;
+            if(I2SClocklessLedDriver_semDisp==NULL)
+                I2SClocklessLedDriver_semDisp = xSemaphoreCreateBinary();
+                const TickType_t xDelay = 50 ; //to avoid full blocking
+            xSemaphoreTake(I2SClocklessLedDriver_semDisp, xDelay);
+            //printf("on retourne %ld\n",(ESP.getCycleCount()-t1)/240000);
+         }
         leds = newleds;
         showPixels(dispmode);
         //leds = tmp_leds;
@@ -766,6 +779,18 @@ Show pixels classiques
 
     void showPixels(displayMode dispmode)
     {
+
+ if (dispmode == NO_WAIT && isDisplaying == true)
+            {
+                //printf("deja display\n");
+                //return;
+                wasWaitingtofinish = true;
+                if(I2SClocklessLedDriver_semDisp==NULL)
+                    I2SClocklessLedDriver_semDisp = xSemaphoreCreateBinary();
+                    const TickType_t xDelay = 50 ; //to avoid full blocking
+                xSemaphoreTake(I2SClocklessLedDriver_semDisp, xDelay);
+                //printf("one re\n");
+            }
 
         #if HARDWARESPRITES == 1
         memset(target, 0, num_led_per_strip * num_strips  * 2);
@@ -793,7 +818,7 @@ Show pixels classiques
         #endif
         dmaBufferActive = 1;
         i2sStart(DMABuffersTampon[2]);
-
+        isDisplaying=true;
         if (dispmode == WAIT)
         {
             isWaiting = true;
@@ -805,6 +830,7 @@ Show pixels classiques
         {
             isWaiting = false;
         }
+        __displayMode=dispmode;
         //isWaiting = true;
         //I2SClocklessLedDriver_sem=xSemaphoreCreateBinary();
         //xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
@@ -1033,7 +1059,7 @@ Show pixels classiques
         i2sReset();
 
         (&I2S0)->conf.tx_start = 0;
-        while( (&I2S0)->conf.tx_start ==1)
+        while( (&I2S0)->conf.tx_start ==1){}
          ets_delay_us(30);
        // isDisplaying = false;
         /*
@@ -1041,6 +1067,16 @@ Show pixels classiques
          */
 
         //xSemaphoreGive(I2SClocklessLedDriver_semDisp);
+        if( __displayMode == NO_WAIT && wasWaitingtofinish == true)
+        {
+            // REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
+         //portBASE_TYPE HPTaskAwoken = 0;
+               
+               wasWaitingtofinish = false;
+                  xSemaphoreGive(I2SClocklessLedDriver_semDisp);
+                 
+        }
+    isDisplaying =false;
         leds=saveleds;
     }
 
@@ -1190,14 +1226,16 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
              
                  
         ((I2SClocklessLedDriver *)arg)->i2sStop();
-        if(cont->isDisplaying ==true && cont->__displayMode == NO_WAIT)
+        /*
+        if( cont->__displayMode == NO_WAIT && cont->wasWaitingtofinish == true)
         {
             // REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
          portBASE_TYPE HPTaskAwoken = 0;
                cont->isDisplaying =false;
+               cont->wasWaitingtofinish = false;
                   xSemaphoreGiveFromISR(((I2SClocklessLedDriver *)arg)->I2SClocklessLedDriver_semDisp, &HPTaskAwoken);
                   if(HPTaskAwoken == pdTRUE) portYIELD_FROM_ISR(HPTaskAwoken);
-        }
+        }*/
         if (cont->isWaiting)
         {
             portBASE_TYPE HPTaskAwoken = 0;
