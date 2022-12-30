@@ -1,4 +1,5 @@
 #include "FastLED.h"
+#define ENABLE_HARDWARE_SCROLL
 #include "I2SClocklessLedDriver.h"
 #define NUM_LEDS_PER_STRIP 360 //each strip will make 3 rows hence each row will be 120 leds wide
 #define NUMSTRIPS 16

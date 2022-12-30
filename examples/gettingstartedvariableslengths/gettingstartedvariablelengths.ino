@@ -1,13 +1,15 @@
-#define NUM_LEDS_PER_STRIP 256
+#define LENGTH1 200
+#define LENGTH2 300
+#define LENGTH3 100
 #define NUMSTRIPS 3
 #define USE_FASTLED //to enable the link between Pixel type and CRGB type if you need it and to increase compatibility
 #include "I2SClocklessLedDriver.h"
 
 //here we have 3 colors per pixel
-uint8_t leds[NUMSTRIPS*NUM_LEDS_PER_STRIP*3];
+uint8_t leds[(LENGTH1 + LENGTH2 + LENGTH3)*3];
 
 int pins[3]={0,2,4};
-int lengths[3]={NUM_LEDS_PER_STRIP,3*NUM_LEDS_PER_STRIP,2*NUM_LEDS_PER_STRIP};
+int lengths[3]={LENGTH1,LENGTH2,LENGTH3};
 
 I2SClocklessLedDriver driver;
 void setup() {

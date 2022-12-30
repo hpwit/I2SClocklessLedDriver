@@ -1,5 +1,6 @@
 #define ALTERNATEPATTERN 0
 #include "FastLED.h"
+#define ENABLE_HARDWARE_SCROLL
 #include "I2SClocklessLedDriver.h"
 #define NUM_LEDS_PER_STRIP 256
 #define NUMSTRIPS 16
@@ -19,7 +20,7 @@ void setup()
 {
   Serial.begin(115200);
 
-  driver.initled((uint8_t *)leds, pins, numstrips, NUM_LEDS_PER_STRIP, ORDER_GRB);
+  driver.initled((uint8_t *)leds, pins, NUMSTRIPS, NUM_LEDS_PER_STRIP, ORDER_GRB);
   driver.setBrightness(20);
   for (int j = 0; j < NUMSTRIPS; j++)
   {

@@ -54,6 +54,9 @@ CRGB *leds4=leds+3*NUM_LED_PER_STRIPS;
 
 If all the strips of the first example are of the same size, then the 2 examples are the doing exactly the same. Hence when using strips of different lengths we cannot put them in a  big array ? **FALSE**. You cant create a large array when using `NUM_LED_PER_STRIP` being the largest of `number_of_leds`. Of course you array woul be larger than you actual numbre of leds but we can do with the lost of space.
 
+
+
+
 ### OK, but what is the link between an array of strips and this driver ?
 Here is how we would declare the 4 strips in of our example:
 ```C
@@ -61,8 +64,20 @@ CRGB leds[4*NUM_LED_PER_STRIPS];
 int pins[4]={PIN1,PIN2,PIN3,PIN4};
 driver.initled((uint8_t*)leds,pins,4,NUM_LED_PER_STRIPS,ORDER_GRB);
 ```
-We are declaring that my `leds` array represent 4 strips of `NUM_LED_PER_STRIPS` leds ,each strip being linked to the pins defined in the pins array `pins`. This is way easier to declare a lot of strips. As discussed before if your strips are not of the same lentgh just define `NUM_LED_PER_STRIPS` with the largest `number_of_leds`.
+We are declaring that my `leds` array represent 4 strips of `NUM_LED_PER_STRIPS` leds ,each strip being linked to the pins defined in the pins array `pins`. This is way easier to declare a lot of strips. 
 
+
+### If you want strips of different lengths
+```C
+#define LENGTH1 200
+#define LENGTH2 300
+#define LENGTH3 100
+int pins[3]={0,2,4};
+int lengths[3]={LENGTH1,LENGTH2,LENGTH3};
+CRGB leds[LENGTH1 + LENGTH2 + LENGTH3];
+
+driver.initled((uint8_t*)leds,pins,lengths,3,ORDER_GRB);
+```
 
 ### First let's declare a new driver
 
@@ -135,6 +150,47 @@ uint8_t leds[4*NUM_LEDS];
  int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
  driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
  ```
+
+
+#### `initled(uint8_t *leds,int * Pins,int* lengths int NUMSTRIPS,colorarrangment cArr)`:
+
+ This function initialize the strips.
+* `*leds`: a pointer to the leds array
+* `*Pins`: a pointer to the pins array
+* `*lengths`: a pointer to the led strips length array
+* `num_strips`: the number of parallel strips
+* `cArr`: The led ordering
+    * `ORDER_GRBW`: For the RGBW strips
+    * `ORDER_RGB`
+    * `ORDER_RBG`
+    * `ORDER_GRB` : The most often used
+    * `ORDER_GBR`
+    * `ORDER_BRG`
+    * `ORDER_BGR`
+
+####  `void initled(Pixels pix,int *Pinsq)`
+
+If you want to use the pixelslib library features [https://github.com/hpwit/PixelsTypes]
+
+```C
+#define NUMSTRIPS 4
+#define USE_PIXELSLIB
+#define SIZE_STRIP1 45
+#define SIZE_STRIP2 20
+#define SIZE_STRIP3 80
+#define SIZE_STRIP4 63
+#include "I2SClocklessLedDriver.h"
+
+I2SClocklessLedDriver driver;
+
+int lengths[4]={SIZE_STRIP1,SIZE_STRIP2,SIZE_STRIP3,SIZE_STRIP4};
+Pixels leds=Pixels(lengths,4);
+int pins[NUMSTRIPS] ={0,2,4,5};
+driver.initled(leds,pins);
+
+
+```
+
  #### `setBrightness(int brightness)`:
  
  This function sets the default brightness for 0->255
@@ -189,10 +245,36 @@ driver.showPixels(leds2);
 
 ```
 
+### And if you do not wanna wait while displaying ? 
+`void showPixels(displayMode dispmode)` and `void showPixels(displayMode dispmode,uint8_t *newleds)` are two functions that can allow you to display the pixels without having to wait
+
+```C
+showPixels(NO_WAIT); //it will start displaying the leds but giving you back the process 
+ showPixels(NO_WAIT,newleds); //same here
+
+ //i.e if you do this
+//A
+showPixels(NO_WAIT); 
+delay(20);
+//B
+ //between A and B it will have passed either 20 or the time of the showPixels (if it's longer than 20ms)
+```
+
+if you do this
+```C
+showPixels(NO_WAIT);
+showPixels(NO_WAIT);
+```
+then the ssocn showPixels will wait for the first one to end before starting the second one.
+
+
 ### 'HARDWARE SCROLLING'
 Old term for a nice trick. The idea is to do a remapping of the leds within the driver directly so that the leds are displayed in another order. Pixels are pushed one at a time, and the normal way to do it is by going led 0,1,2,3 ....,N
 Let's say that I want to 'scroll' by 5 pixels all the leds. Normally you would move leds 4->N-1 into 0,N-5 and then copy led 0=>led N-4 act. and then do the fastled.show().
 The way I do it is to push within the driver led 4,5,6,7, ...., N-1,0,1,2,3 by calculating each time which pixels needs to be displayed using a simple algorithm about something along this `lednumber=> (lednumber+scroll)%N` (then a bit more complicated to take into account snake arrangement or not ,...)
+
+To activate this you need to add
+#define ENABLE_HARDWARE_SCROLL
 
 #### `OffsetDisplay` object:
 ```C

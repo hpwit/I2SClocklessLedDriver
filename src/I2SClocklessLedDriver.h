@@ -1,10 +1,15 @@
-
-
-/*
- 
+/* library options
+ *  ENABLE_HARDWARE_SCROLL : to enable the HARDWARE SCROLL. Attention wjhen enabled you can use the offset  but it could mean slow when using all the pins
+ *  NUMSTRIPS add this before the #include of the library this will help with the speed of the buffer calculation
+ *  USE_PIXELSLIB : to use tthe pixel lib library automatic functions
  */
 
+#ifndef __I2S_CLOCKLESS_DRIVER_H
+#define __I2S_CLOCKLESS_DRIVER_H
+
+ 
 #pragma once
+
 
 #include "esp_heap_caps.h"
 #include "soc/soc.h"
@@ -110,8 +115,9 @@
 #endif
 #endif
 
+#ifdef USE_PIXELSLIB
 #include "pixelslib.h"
-
+#endif
 
 #define FULL_DMA_BUFFER
 
@@ -863,11 +869,12 @@ Show pixels classiques
             return max;
     }
 
+#ifdef USE_PIXELSLIB
     void initled(Pixels pix,int *Pinsq)
-    {
+    { 
         initled((uint8_t *)pix.getPixels(),Pinsq,pix.getLengths(), pix.getNumStrip());
     }
-
+#endif
     void initled(uint8_t *leds, int *Pinsq, int *sizes,  int num_strips)
     {
         total_leds=0;
@@ -964,6 +971,12 @@ Show pixels classiques
         initled(leds, Pinsq,this->stripSize, num_strips,cArr);
     }
 
+/*
+*
+*
+*
+*
+*/
 
     void __initled(uint8_t *leds, int *Pinsq, int num_strips, int num_led_per_strip)
     {
@@ -1478,3 +1491,4 @@ static void IRAM_ATTR loadAndTranspose(uint8_t *ledt, int *sizes, int num_strips
 }
 #endif
 
+#endif
