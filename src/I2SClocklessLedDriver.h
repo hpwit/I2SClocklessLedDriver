@@ -117,6 +117,8 @@
 
 #ifdef USE_PIXELSLIB
 #include "pixelslib.h"
+#else
+#include "___pixeltypes.h"
 #endif
 
 #define FULL_DMA_BUFFER
