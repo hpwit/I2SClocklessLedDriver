@@ -121,7 +121,7 @@
 #include "___pixeltypes.h"
 #endif
 
-#define FULL_DMA_BUFFER
+//#define FULL_DMA_BUFFER
 
 typedef union
 {
@@ -824,6 +824,7 @@ Show pixels classiques
         #else
         loadAndTranspose(leds, stripSize, num_strips, (uint16_t *)DMABuffersTampon[0]->buffer, ledToDisplay, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
         #endif
+        __displayMode=dispmode;
         dmaBufferActive = 1;
         i2sStart(DMABuffersTampon[2]);
         isDisplaying=true;
@@ -837,8 +838,9 @@ Show pixels classiques
         else
         {
             isWaiting = false;
+            isDisplaying = true;
         }
-        __displayMode=dispmode;
+        //__displayMode=dispmode;
         //isWaiting = true;
         //I2SClocklessLedDriver_sem=xSemaphoreCreateBinary();
         //xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
@@ -1071,10 +1073,11 @@ Show pixels classiques
 
        // xSemaphoreGive(I2SClocklessLedDriver_semDisp);
         esp_intr_disable(_gI2SClocklessDriver_intr_handle);
-        i2sReset();
+       
 
         (&I2S0)->conf.tx_start = 0;
         while( (&I2S0)->conf.tx_start ==1){}
+         i2sReset();
          ets_delay_us(30);
        // isDisplaying = false;
         /*
@@ -1082,6 +1085,7 @@ Show pixels classiques
          */
 
         //xSemaphoreGive(I2SClocklessLedDriver_semDisp);
+        isDisplaying =false;
         if( __displayMode == NO_WAIT && wasWaitingtofinish == true)
         {
             // REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
@@ -1091,7 +1095,7 @@ Show pixels classiques
                   xSemaphoreGive(I2SClocklessLedDriver_semDisp);
                  
         }
-    isDisplaying =false;
+    
         leds=saveleds;
     }
 
