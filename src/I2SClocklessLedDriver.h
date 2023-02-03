@@ -257,13 +257,16 @@ public:
     int nb_components;
     int stripSize[16];
     uint16_t (*mapLed)(int);
+       #ifdef __HARDWARE_MAP
+        uint16_t * _hmap;
+       volatile uint16_t * _hmapoff;
+    #endif
     void setMapLed(uint16_t (*newMapLed)(int))
     {
       mapLed = newMapLed;
+
     }
-    #ifdef __HARDWARE_MAP
-        uint16_t * _hmap;
-    #endif
+ 
     /*
      This flag is used when using the NO_WAIT modeÒÒ
      */
@@ -807,7 +810,10 @@ Show pixels classiques
 
     void showPixels(displayMode dispmode)
     {
-
+#ifdef __HARDWARE_MAP
+           _hmapoff=_hmap;
+        
+    #endif
  if (dispmode == NO_WAIT && isDisplaying == true)
             {
                 //printf("deja display\n");
@@ -1014,24 +1020,41 @@ Show pixels classiques
         target = (uint16_t *)malloc(num_led_per_strip * num_strips * 2 + 2);
 #endif
 
+
 #ifdef __HARDWARE_MAP
-Serial.printf("jksdfd\n");
-    _hmap=(uint16_t *)malloc(num_led_per_strip * num_strips * 2);
+    _hmap=(uint16_t *)malloc(  total_leds * 2);
     if(!_hmap)
     {
         Serial.printf("no memory\n");
     }
     else
     {
+        /*
         for(int leddisp=0;leddisp<num_led_per_strip;leddisp++)
         {
             for (int i = 0; i < num_strips; i++)
             {
-                _hmap[i+leddisp*num_strips]=mapLed(leddisp+i*num_led_per_strip);
+                _hmap[i+leddisp*num_strips]=mapLed(leddisp+i*num_led_per_strip)*nb_components;
             }
         }
+        */
+      //int offset=0;
+       int offset2=0;
+         for(int leddisp=0;leddisp<num_led_per_strip;leddisp++)
+            {
+                int offset=0;
+                 for (int i = 0; i < num_strips; i++)
+                 {
+                    if(leddisp<stripSize[i])
+                    {
+                         _hmap[offset2]=mapLed(leddisp+offset)*nb_components;
+                         offset+=stripSize[i];
+                         offset2++;
+                    }
+                 }
+            }
+
     }
-    Serial.printf("jksdfd\n");
 #endif
         setBrightness(255);
         dmaBufferCount = 2;
@@ -1519,7 +1542,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver *driver)//uint8_t *
     uint16_t *buffer=(uint16_t *)driver->DMABuffersTampon[driver->dmaBufferActive]->buffer;
     uint16_t led_tmp=driver->ledToDisplay;
     #ifdef __HARDWARE_MAP
-        led_tmp=driver->ledToDisplay*driver->num_strips;
+        //led_tmp=driver->ledToDisplay*driver->num_strips;
     #endif
     memset(secondPixel,0,sizeof(secondPixel));
     #ifdef _LEDMAPPING
@@ -1531,21 +1554,25 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver *driver)//uint8_t *
    #endif
     for (int i = 0; i < driver->num_strips; i++)
     {
-        #ifdef _LEDMAPPING
-            #ifdef __SOFTWARE_MAP
-            poli = driver->leds + driver->mapLed(led_tmp) * nbcomponents;
-            #endif
-            #ifdef __HARDWARE_MAP
-                poli = driver->leds + driver->_hmap[led_tmp+i] * nbcomponents;
-            #endif
-        #endif
+
         if(driver->ledToDisplay < driver->stripSize[i])
         {
+        #ifdef _LEDMAPPING
+            #ifdef __SOFTWARE_MAP
+                poli = driver->leds + driver->mapLed(led_tmp) * nbcomponents;
+            #endif
+            #ifdef __HARDWARE_MAP
+                poli = driver->leds + *(driver->_hmapoff);
+            #endif
+        #endif
         secondPixel[driver->p_g].bytes[i] = driver->__green_map[*(poli + 1)];
         secondPixel[driver->p_r].bytes[i] = driver->__red_map[*(poli + 0)];
         secondPixel[driver->p_b].bytes[i] =  driver->__blue_map[*(poli + 2)];
         if (nbcomponents > 3)
             secondPixel[3].bytes[i] = driver->__white_map[*(poli + 3)];
+        #ifdef __HARDWARE_MAP
+            driver->_hmapoff++;
+        #endif
         }
       #ifdef _LEDMAPPING
             #ifdef __SOFTWARE_MAP
