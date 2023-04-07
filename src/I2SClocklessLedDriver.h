@@ -115,11 +115,13 @@
 #endif
 #endif
 
+
 #ifdef USE_PIXELSLIB
 #include "pixelslib.h"
 #else
 #include "___pixeltypes.h"
 #endif
+
 
 #ifdef __HARDWARE_MAP
 #define _LEDMAPPING
@@ -127,7 +129,9 @@
 #ifdef __SOFTWARE_MAP
 #define _LEDMAPPING
 #endif
-
+#ifdef __HARDWARE_MAP_PROGMEM
+#define _LEDMAPPING
+#endif
 //#define FULL_DMA_BUFFER
 
 typedef union
@@ -260,7 +264,21 @@ public:
        #ifdef __HARDWARE_MAP
         uint16_t * _hmap;
        volatile uint16_t * _hmapoff;
+       void setHmap( uint16_t * map)
+    {
+        _hmap=map;
+    }
     #endif
+    #ifdef __HARDWARE_MAP_PROGMEM
+        const uint16_t * _hmap;
+       volatile uint16_t _hmapoff;
+   
+
+    void setHmap(const uint16_t * map)
+    {
+        _hmap=map;
+    }
+     #endif
     void setMapLed(uint16_t (*newMapLed)(int))
     {
       mapLed = newMapLed;
@@ -814,6 +832,11 @@ Show pixels classiques
            _hmapoff=_hmap;
         
     #endif
+    #ifdef __HARDWARE_MAP_HARDWARE
+           _hmapoff=0;
+        
+    #endif
+
  if (dispmode == NO_WAIT && isDisplaying == true)
             {
                 //printf("deja display\n");
@@ -1562,7 +1585,10 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver *driver)//uint8_t *
                 poli = driver->leds + driver->mapLed(led_tmp) * nbcomponents;
             #endif
             #ifdef __HARDWARE_MAP
-                poli = driver->leds + *(driver->_hmapoff);
+                 poli = driver->leds + *(driver->_hmapoff);
+            #endif
+            #ifdef __HARDWARE_MAP_PROGMEM
+                 poli = driver->leds + pgm_read_word_near(driver->_hmap + driver->_hmapoff);
             #endif
         #endif
         secondPixel[driver->p_g].bytes[i] = driver->__green_map[*(poli + 1)];
@@ -1571,6 +1597,9 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver *driver)//uint8_t *
         if (nbcomponents > 3)
             secondPixel[3].bytes[i] = driver->__white_map[*(poli + 3)];
         #ifdef __HARDWARE_MAP
+            driver->_hmapoff++;
+        #endif
+    #ifdef __HARDWARE_MAP_PROGMEM
             driver->_hmapoff++;
         #endif
         }
