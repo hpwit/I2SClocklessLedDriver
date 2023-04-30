@@ -66,37 +66,37 @@
 #define _p_b 2
 #define _nb_components 4
 #else
-#ifdef COLOR_ORDER_RGBW
+#ifdef COLOR_ORDER_RGB
 #define _p_r 0
 #define _p_g 1
 #define _p_b 2
 #define _nb_components 3
 #else
-#ifdef  COLOR_ORDER_RGBW
+#ifdef  COLOR_ORDER_RBG
 #define _p_r 0
 #define _p_g 2
 #define _p_b 1
 #define _nb_components 3
 #else
-#ifdef COLOR_ORDER_RGBW
+#ifdef COLOR_ORDER_GBR
 #define _p_r 2
 #define _p_g 0
 #define _p_b 1
 #define _nb_components 3
 #else
-#ifdef COLOR_ORDER_RGBW
+#ifdef COLOR_ORDER_BGR
 #define _p_r 2
 #define _p_g 1
 #define _p_b 0
 #define _nb_components 3
 #else
-#ifdef COLOR_ORDER_RGBW
+#ifdef COLOR_ORDER_BRG
 #define _p_r 1
 #define _p_g 2
 #define _p_b 0
 #define _nb_components 3
 #else
-#ifdef COLOR_ORDER_RGBW
+#ifdef COLOR_ORDER_GRB
 #define _p_r 1
 #define _p_g 0
 #define _p_b 2
