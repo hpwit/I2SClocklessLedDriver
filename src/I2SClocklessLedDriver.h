@@ -1161,18 +1161,20 @@ Show pixels classiques
        // xSemaphoreGive(I2SClocklessLedDriver_semDisp);
         esp_intr_disable(_gI2SClocklessDriver_intr_handle);
        
-
+ets_delay_us(16);
         (&I2S0)->conf.tx_start = 0;
         while( (&I2S0)->conf.tx_start ==1){}
          i2sReset();
-         ets_delay_us(30);
+         
+             isDisplaying =false;
+         leds=saveleds;
        // isDisplaying = false;
         /*
          We have finished to display the strips
          */
 
         //xSemaphoreGive(I2SClocklessLedDriver_semDisp);
-        isDisplaying =false;
+    
         if( __displayMode == NO_WAIT && wasWaitingtofinish == true)
         {
             // REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
@@ -1183,7 +1185,7 @@ Show pixels classiques
                  
         }
     
-        leds=saveleds;
+        
     }
 
     void putdefaultones(uint16_t *buffer)
