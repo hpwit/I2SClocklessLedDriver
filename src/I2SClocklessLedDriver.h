@@ -840,6 +840,7 @@ Show pixels classiques
  if (dispmode == NO_WAIT && isDisplaying == true)
             {
                 //printf("deja display\n");
+                ESP_LOGE(TAG, "already displaying... wait");
                 //return;
                 wasWaitingtofinish = true;
                 if(I2SClocklessLedDriver_semDisp==NULL)
