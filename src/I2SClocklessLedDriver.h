@@ -812,7 +812,7 @@ Show pixels classiques
         //tmp_leds = leds;
          if(isDisplaying == true and __displayMode==NO_WAIT)
          {
-            //printf("dejà en cours on attend\n");
+            ESP_LOGE(TAG, "already displaying... wait");
             //long t1=ESP.getCycleCount();
             wasWaitingtofinish = true;
             if(I2SClocklessLedDriver_semDisp==NULL)
