@@ -240,6 +240,7 @@ public:
     volatile xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
     volatile xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
     volatile xSemaphoreHandle I2SClocklessLedDriver_semDisp = NULL;
+    volatile xSemaphoreHandle I2SClocklessLedDriver_waitDisp = NULL;
     volatile int dmaBufferActive = 0;
     volatile bool wait;
     displayMode __displayMode;
@@ -289,7 +290,7 @@ public:
      This flag is used when using the NO_WAIT modeÒÒ
      */
     volatile bool isDisplaying = false;
-    volatile bool isWaiting = true;
+    volatile bool isWaiting = false;
     volatile bool framesync = false;
     volatile bool wasWaitingtofinish = false;
     volatile int counti;
@@ -496,14 +497,18 @@ public:
             DMABuffersTransposed[num_led_per_strip + 1]->descriptor.qe.stqe_next = &(DMABuffersTransposed[0]->descriptor);
         }
         transpose = false;
+             //wasWaitingtofinish = true;
+           //  Serial.printf(" was:%d\n",wasWaitingtofinish);
         i2sStart(DMABuffersTransposed[0]);
 
         if (dispmode == WAIT)
         {
             isWaiting = true;
+            if( I2SClocklessLedDriver_sem==NULL)
             I2SClocklessLedDriver_sem=xSemaphoreCreateBinary();
             xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
         }
+    
     }
 
 
@@ -524,10 +529,23 @@ public:
     void showPixelsFirstTranspose(uint8_t *new_leds)
     {
         uint8_t *tmp_leds;
-        tmp_leds = leds;
+      //  Serial.println("on entre");
+        if ( isDisplaying == true && __displayMode == NO_WAIT)
+        {
+           // Serial.println("we are here in trs");
+           wasWaitingtofinish = true;
+             tmp_leds = new_leds;
+            if(I2SClocklessLedDriver_waitDisp==NULL)
+         I2SClocklessLedDriver_waitDisp= xSemaphoreCreateCounting(10,0);
+          xSemaphoreTake(I2SClocklessLedDriver_waitDisp, portMAX_DELAY);
+          wasWaitingtofinish = false;
+          // Serial.println("deiba waiuting in tre");
+        new_leds=tmp_leds;
+
+        }
         leds = new_leds;
         showPixelsFirstTranspose();
-        leds = tmp_leds;
+       // leds = tmp_leds;
     }
 
     void showPixelsFirstTranspose()
@@ -536,20 +554,28 @@ public:
     }
     void showPixelsFirstTranspose(displayMode dispmode)
     {
-        
+       // Serial.println("on entrre");
+        transpose = false;
         if (leds == NULL)
         {
            ESP_LOGE(TAG,"no led");
             return;
         }
-        if (__displayMode == NO_WAIT && isDisplaying == true)
+        if ( isDisplaying == true && dispmode == NO_WAIT)
         {
-            if(I2SClocklessLedDriver_semDisp==NULL)
-         I2SClocklessLedDriver_semDisp= xSemaphoreCreateBinary();
-          xSemaphoreTake(I2SClocklessLedDriver_semDisp, portMAX_DELAY);
+            Serial.println("we are here");
+           wasWaitingtofinish = true;
+            if(I2SClocklessLedDriver_waitDisp==NULL)
+         I2SClocklessLedDriver_waitDisp= xSemaphoreCreateCounting(10,0);
+          xSemaphoreTake(I2SClocklessLedDriver_waitDisp, portMAX_DELAY);
+           Serial.println("deiba waiuting");
+
 
         }
+        // Serial.println("on dsiup");
+        // dmaBufferActive=0;
         transposeAll();
+        //Serial.println("end transpose");
         showPixelsFromBuffer(dispmode);
        
     }
@@ -581,11 +607,16 @@ public:
         }*/
         for (int j = 0; j < num_led_per_strip; j++)
         {
+            ledToDisplay=j;
+            dmaBufferActive=j+1;
+            loadAndTranspose(this);
+            /*
             #ifdef ENABLE_HARDWARE_SCROLL
             loadAndTranspose(leds, num_led_per_strip, num_strips, _offsetDisplay, (uint16_t *)DMABuffersTransposed[j + 1]->buffer, j, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
             #else
             loadAndTranspose(leds, stripSize, num_strips, (uint16_t *)DMABuffersTransposed[j+1]->buffer, j, __green_map, __red_map, __blue_map, __white_map, nb_components, p_g, p_r, p_b);
             #endif
+            */
         }
     }
 
@@ -808,20 +839,21 @@ Show pixels classiques
     
         void showPixels(displayMode dispmode,uint8_t *newleds)
     {
-        //uint8_t *tmp_leds;
-        //tmp_leds = leds;
+        uint8_t *tmp_leds;
+        tmp_leds = newleds;
          if(isDisplaying == true and __displayMode==NO_WAIT)
          {
-            ESP_LOGE(TAG, "already displaying... wait");
-            //long t1=ESP.getCycleCount();
             wasWaitingtofinish = true;
-            if(I2SClocklessLedDriver_semDisp==NULL)
-                I2SClocklessLedDriver_semDisp = xSemaphoreCreateBinary();
-                const TickType_t xDelay = 50 ; //to avoid full blocking
-            xSemaphoreTake(I2SClocklessLedDriver_semDisp, xDelay);
-            //printf("on retourne %ld\n",(ESP.getCycleCount()-t1)/240000);
+            //ESP_LOGE(TAG, "already displaying... wait");
+            //long t1=ESP.getCycleCount();
+            
+            if(I2SClocklessLedDriver_waitDisp==NULL)
+                I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10,0);
+                const TickType_t xDelay = 100 ; //to avoid full blocking
+            xSemaphoreTake(I2SClocklessLedDriver_waitDisp, xDelay);
+           // printf("on retourne %ld\n",(ESP.getCycleCount()-t1)/240);
          }
-        leds = newleds;
+        leds = tmp_leds;
         showPixels(dispmode);
         //leds = tmp_leds;
     }
@@ -840,13 +872,13 @@ Show pixels classiques
  if (dispmode == NO_WAIT && isDisplaying == true)
             {
                 //printf("deja display\n");
-                ESP_LOGE(TAG, "already displaying... wait");
+              //  ESP_LOGE(TAG, "already displaying... wait");
                 //return;
                 wasWaitingtofinish = true;
-                if(I2SClocklessLedDriver_semDisp==NULL)
-                    I2SClocklessLedDriver_semDisp = xSemaphoreCreateBinary();
+                if(I2SClocklessLedDriver_waitDisp==NULL)
+                    I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10,0);
                     const TickType_t xDelay = 50 ; //to avoid full blocking
-                xSemaphoreTake(I2SClocklessLedDriver_semDisp, xDelay);
+                xSemaphoreTake(I2SClocklessLedDriver_waitDisp, portMAX_DELAY);
                 //printf("one re\n");
             }
 
@@ -1158,8 +1190,9 @@ Show pixels classiques
     {
 
        
-
+ //Serial.println("in I2S stop");
        // xSemaphoreGive(I2SClocklessLedDriver_semDisp);
+//Serial.printf(" was in stop:%d/n",wasWaitingtofinish);
         esp_intr_disable(_gI2SClocklessDriver_intr_handle);
        
 ets_delay_us(16);
@@ -1168,7 +1201,7 @@ ets_delay_us(16);
          i2sReset();
          
              isDisplaying =false;
-         leds=saveleds;
+         //leds=saveleds;
        // isDisplaying = false;
         /*
          We have finished to display the strips
@@ -1177,12 +1210,13 @@ ets_delay_us(16);
         //xSemaphoreGive(I2SClocklessLedDriver_semDisp);
     
         if( __displayMode == NO_WAIT && wasWaitingtofinish == true)
+       //if(  wasWaitingtofinish == true)
         {
             // REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
          //portBASE_TYPE HPTaskAwoken = 0;
-               
+            // Serial.println("in I2S Step");
                wasWaitingtofinish = false;
-                  xSemaphoreGive(I2SClocklessLedDriver_semDisp);
+                  xSemaphoreGive(I2SClocklessLedDriver_waitDisp);
                  
         }
     
@@ -1565,7 +1599,12 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver *driver)//uint8_t *
     //cont->leds, cont->stripSize, cont->num_strips, (uint16_t *)cont->DMABuffersTampon[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->__green_map, cont->__red_map, cont->__blue_map, cont->__white_map, cont->nb_components, cont->p_g, cont->p_r, cont->p_b);
     int nbcomponents=driver->nb_components;
     Lines secondPixel[nbcomponents];
-    uint16_t *buffer=(uint16_t *)driver->DMABuffersTampon[driver->dmaBufferActive]->buffer;
+    uint16_t *buffer;
+    if(driver->transpose)
+    buffer=(uint16_t *)driver->DMABuffersTampon[driver->dmaBufferActive]->buffer;
+    else
+     buffer=(uint16_t *)driver->DMABuffersTransposed[driver->dmaBufferActive]->buffer;
+
     uint16_t led_tmp=driver->ledToDisplay;
     #ifdef __HARDWARE_MAP
         //led_tmp=driver->ledToDisplay*driver->num_strips;
