@@ -26,7 +26,8 @@
 #include "freertos/semphr.h"
 #include <stdio.h>
 #include <rom/ets_sys.h>
-#include "esp32-hal-log.h"
+//#include "esp32-hal-log.h"
+#include "esp_log.h"
 #include "Math.h"
 
 
@@ -261,7 +262,7 @@ public:
     int i2s_base_pin_index;
     int nb_components;
     int stripSize[16];
-    uint16_t (*mapLed)(int);
+    uint16_t (*mapLed)(uint16_t led);
        #ifdef __HARDWARE_MAP
         uint16_t * _hmap;
        volatile uint16_t * _hmapoff;
@@ -280,7 +281,7 @@ public:
         _hmap=map;
     }
      #endif
-    void setMapLed(uint16_t (*newMapLed)(int))
+    void setMapLed(uint16_t (*newMapLed)(uint16_t led))
     {
       mapLed = newMapLed;
 
