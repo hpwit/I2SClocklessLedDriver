@@ -13,7 +13,7 @@ before_install:
 
   # TODO: undo
   # remove submodules, we don't want those to be actually tested for compliance
-  - git submodule status | rm -Rf `cut -d ' ' -f 3`
+  #- git submodule status | rm -Rf `cut -d ' ' -f 3`
 
   # Formatting checks:
   # Check for files starting with a blank line
@@ -47,7 +47,7 @@ before_install:
   - set_sketchbook_folder "$SKETCHBOOK_FOLDER"
 
   #- install_ide '("1.8.0" "1.8.10" "1.8.11")'
-  - install_ide '("2.0.0")'
+  - install_ide '("newest")'
 
   # Install the library from the repository
   - install_library
