@@ -789,7 +789,7 @@ public:
 
  void waitDisplay()
  {
-    if(isDisplaying == true and __displayMode==NO_WAIT)
+    if(isDisplaying == true )
             {
                 wasWaitingtofinish = true;
                 ESP_LOGD(TAG, "already displaying... wait");
@@ -801,6 +801,7 @@ public:
                 xSemaphoreTake(I2SClocklessLedDriver_waitDisp,xDelay);
             
             }
+    isDisplaying=true;
  }
 
      void showPixels(displayMode dispmode,uint8_t *new_leds, OffsetDisplay offdisp)
@@ -1187,7 +1188,7 @@ ets_delay_us(16);
              isDisplaying =false;
 
     
-        if( __displayMode == NO_WAIT && wasWaitingtofinish == true)
+        if(  wasWaitingtofinish == true)
         {
 
                wasWaitingtofinish = false;
