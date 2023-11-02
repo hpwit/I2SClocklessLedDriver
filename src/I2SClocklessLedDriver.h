@@ -30,7 +30,7 @@
 #include "esp_log.h"
 #include "Math.h"
 
-
+#include "helper.h"
 
 #ifndef NUMSTRIPS
 #define NUMSTRIPS 16
@@ -1329,7 +1329,7 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
             portBASE_TYPE HPTaskAwoken = 0;
             xSemaphoreGiveFromISR(cont->I2SClocklessLedDriver_sem, &HPTaskAwoken);
             if (HPTaskAwoken == pdTRUE)
-                portYIELD_FROM_ISR(HPTaskAwoken);
+                portYIELD_FROM_ISR();
         }
     }
     REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
