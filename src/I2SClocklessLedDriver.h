@@ -28,7 +28,7 @@
 #include <rom/ets_sys.h>
 //#include "esp32-hal-log.h"
 #include "esp_log.h"
-#include "Math.h"
+#include "math.h"
 
 #include "helper.h"
 
@@ -46,12 +46,14 @@
 
 #define I2S_DEVICE 0
 
-#define AA (0x00AA00AAL)
+#define AAA (0x00AA00AAL)
 #define CC (0x0000CCCCL)
 #define FF (0xF0F0F0F0L)
 #define FF2 (0x0F0F0F0FL)
 
+#ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
 
 #ifndef HARDWARESPRITES
 #define HARDWARESPRITES 0
@@ -114,6 +116,11 @@
 #endif
 #endif
 #endif
+#endif
+
+#ifndef NUM_LEDS_PER_STRIP
+#pragma message "NUM_LEDS_PER_STRIP not defined, using default 256"
+#define NUM_LEDS_PER_STRIP 256
 #endif
 
 #define __delay (((NUM_LEDS_PER_STRIP * 125 * 8 * _nb_components) /100000) +1 )
@@ -182,16 +189,9 @@ enum displayMode
     LOOP,
     LOOP_INTERUPT,
 };
-
+/*
 int MOD(int a, int b)
 {
-    /* if (b == 1)
-    {
-        if (a < 0)
-            return -a;
-        else
-            return a;
-    }*/
     if (a < 0)
     {
         if (-a % b == 0)
@@ -202,6 +202,7 @@ int MOD(int a, int b)
     else
         return a % b;
 }
+*/
 
 struct LedTiming
 {
@@ -1361,24 +1362,24 @@ static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B)
 
     // pre-transform x
 #if NUMSTRIPS > 4
-    t = (x ^ (x >> 7)) & AA;
+    t = (x ^ (x >> 7)) & AAA;
     x = x ^ t ^ (t << 7);
     t = (x ^ (x >> 14)) & CC;
     x = x ^ t ^ (t << 14);
 #endif
 #if NUMSTRIPS > 12
-    t = (x1 ^ (x1 >> 7)) & AA;
+    t = (x1 ^ (x1 >> 7)) & AAA;
     x1 = x1 ^ t ^ (t << 7);
     t = (x1 ^ (x1 >> 14)) & CC;
     x1 = x1 ^ t ^ (t << 14);
 #endif
     // pre-transform y
-    t = (y ^ (y >> 7)) & AA;
+    t = (y ^ (y >> 7)) & AAA;
     y = y ^ t ^ (t << 7);
     t = (y ^ (y >> 14)) & CC;
     y = y ^ t ^ (t << 14);
 #if NUMSTRIPS > 8
-    t = (y1 ^ (y1 >> 7)) & AA;
+    t = (y1 ^ (y1 >> 7)) & AAA;
     y1 = y1 ^ t ^ (t << 7);
     t = (y1 ^ (y1 >> 14)) & CC;
     y1 = y1 ^ t ^ (t << 14);
