@@ -122,7 +122,7 @@
 #endif
 
 #ifndef NUM_LEDS_PER_STRIP
-#pragma messafe "NUM_LEDS_PER_STRIP not defined, using default 256"
+#pragma message "NUM_LEDS_PER_STRIP not defined, using default 256"
 #define NUM_LEDS_PER_STRIP 256
 #endif
 
