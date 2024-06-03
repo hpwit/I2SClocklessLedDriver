@@ -56,7 +56,9 @@
 #define FF (0xF0F0F0F0L)
 #define FF2 (0x0F0F0F0FL)
 
+#ifndef MIN
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#endif
 
 #ifndef HARDWARESPRITES
 #define HARDWARESPRITES 0
@@ -193,9 +195,7 @@ enum displayMode
     LOOP_INTERUPT,
 };
 /*
-int MOD(int a, int b)
-{
-
+int MOD(in
     if (a < 0)
     {
         if (-a % b == 0)
