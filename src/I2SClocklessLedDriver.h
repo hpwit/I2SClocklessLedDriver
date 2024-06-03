@@ -27,6 +27,11 @@
 #include <stdio.h>
 #include <rom/ets_sys.h>
 //#include "esp32-hal-log.h"
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+#include "hal/gpio_ll.h"
+#include "soc/gpio_struct.h"
+#include "rom/gpio.h"
+#endif
 #include "esp_log.h"
 #include "math.h"
 
@@ -190,8 +195,7 @@ enum displayMode
     LOOP_INTERUPT,
 };
 /*
-int MOD(int a, int b)
-{
+int MOD(in
     if (a < 0)
     {
         if (-a % b == 0)
