@@ -300,6 +300,7 @@ public:
      */
     volatile bool isDisplaying = false;
     volatile bool isWaiting = false;
+    volatile bool __enableDriver= true;
     volatile bool framesync = false;
     volatile bool wasWaitingtofinish = false;
     volatile int counti;
@@ -852,6 +853,9 @@ public:
 
     void showPixels()
     {
+                if(!__enableDriver)
+        return;
+         waitDisplay();
                 leds=saveleds;
         _offsetDisplay=_defaultOffsetDisplay;
         __displayMode=WAIT;
@@ -882,6 +886,10 @@ public:
 
     void __showPixels()
     {
+                if(!__enableDriver)
+        {
+            return;
+        }
 #ifdef __HARDWARE_MAP
            _hmapoff=_hmap;
         
@@ -1180,7 +1188,7 @@ public:
         (&I2S0)->conf.tx_fifo_reset = 0;
     }
 
-    void IRAM_ATTR i2sStop()
+    void  i2sStop()
     {
 
         esp_intr_disable(_gI2SClocklessDriver_intr_handle);
@@ -1295,6 +1303,13 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
 #else
     I2SClocklessLedDriver *cont = (I2SClocklessLedDriver *)arg;
 
+if(!cont->__enableDriver)
+{
+     REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
+     ((I2SClocklessLedDriver *)arg)->i2sStop();
+     
+     return;
+}
     if (GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ST_S, I2S_OUT_EOF_INT_ST_S))
     {
         cont->framesync = !cont->framesync;
