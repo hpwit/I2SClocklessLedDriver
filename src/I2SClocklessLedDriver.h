@@ -1070,6 +1070,33 @@ public:
 *
 */
 
+void createhardwareMap()
+{
+    #ifdef __HARDWARE_MAP
+    if(mapLed==NULL)
+    {
+        printf("no mapapig\r\n");
+        return;
+    }
+    ESP_LOGE(TAG,"trying to map2");
+       int offset2=0;
+         for(int leddisp=0;leddisp<num_led_per_strip;leddisp++)
+            {
+                int offset=0;
+                 for (int i = 0; i < num_strips; i++)
+                 {
+                    if(leddisp<stripSize[i])
+                    {
+                        ESP_LOGE(TAG,"%d :%d\r\n",leddisp+offset,mapLed(leddisp+offset));
+                         _hmap[offset2]=mapLed(leddisp+offset)*nb_components;
+                         offset+=stripSize[i];
+                         offset2++;
+                    }
+                 }
+            }
+            #endif
+}
+
     void __initled(uint8_t *leds, int *Pinsq, int num_strips, int num_led_per_strip)
     {
         _gammab = 1;
@@ -1077,6 +1104,18 @@ public:
         _gammag = 1;
         _gammaw = 1;
         startleds = 0;
+                this->leds = leds;
+        this->saveleds = leds;
+        this->num_led_per_strip = num_led_per_strip;
+        _offsetDisplay.offsetx = 0;
+        _offsetDisplay.offsety = 0;
+        _offsetDisplay.panel_width = num_led_per_strip;
+        _offsetDisplay.panel_height = 9999;
+        _defaultOffsetDisplay = _offsetDisplay;
+        linewidth = num_led_per_strip;
+        this->num_strips = num_strips;
+        this->dmaBufferCount = dmaBufferCount;
+
  ESP_LOGV(TAG,"xdelay:%d",__delay);
 #if HARDWARESPRITES == 1
         //Serial.println(NUM_LEDS_PER_STRIP * NBIS2SERIALPINS * 8);
@@ -1085,6 +1124,7 @@ public:
 
 
 #ifdef __HARDWARE_MAP
+
     _hmap=(uint16_t *)malloc(  total_leds * 2);
     if(!_hmap)
     {
@@ -1092,6 +1132,7 @@ public:
     }
     else
     {
+        ESP_LOGE(TAG,"trying to map");
         /*
         for(int leddisp=0;leddisp<num_led_per_strip;leddisp++)
         {
@@ -1102,24 +1143,12 @@ public:
         }
         */
       //int offset=0;
-       int offset2=0;
-         for(int leddisp=0;leddisp<num_led_per_strip;leddisp++)
-            {
-                int offset=0;
-                 for (int i = 0; i < num_strips; i++)
-                 {
-                    if(leddisp<stripSize[i])
-                    {
-                         _hmap[offset2]=mapLed(leddisp+offset)*nb_components;
-                         offset+=stripSize[i];
-                         offset2++;
-                    }
-                 }
-            }
+createhardwareMap();
 
     }
 #endif
         setBrightness(255);
+        /*
         dmaBufferCount = 2;
         this->leds = leds;
         this->saveleds = leds;
@@ -1131,7 +1160,7 @@ public:
         _defaultOffsetDisplay = _offsetDisplay;
         linewidth = num_led_per_strip;
         this->num_strips = num_strips;
-        this->dmaBufferCount = dmaBufferCount;
+        this->dmaBufferCount = dmaBufferCount;*/
 
         setPins(Pinsq);
         i2sInit();
@@ -1187,8 +1216,8 @@ public:
         (&I2S0)->conf.tx_fifo_reset = 1;
         (&I2S0)->conf.tx_fifo_reset = 0;
     }
-
-    void  i2sStop()
+/*
+    void   i2sStop()
     {
 
         esp_intr_disable(_gI2SClocklessDriver_intr_handle);
@@ -1210,7 +1239,7 @@ ets_delay_us(16);
         }
     
         
-    }
+    } */
 
     void putdefaultones(uint16_t *buffer)
     {
@@ -1295,6 +1324,29 @@ ets_delay_us(16);
 
     // static void IRAM_ATTR interruptHandler(void *arg);
 };
+static void IRAM_ATTR  i2sStop( I2SClocklessLedDriver *cont)
+    {
+
+        esp_intr_disable(cont->_gI2SClocklessDriver_intr_handle);
+       
+ets_delay_us(16);
+        (&I2S0)->conf.tx_start = 0;
+        while( (&I2S0)->conf.tx_start ==1){}
+         cont->i2sReset();
+         
+              cont->isDisplaying =false;
+
+    
+        if(   cont->wasWaitingtofinish == true)
+        {
+
+                cont->wasWaitingtofinish = false;
+                  xSemaphoreGive( cont->I2SClocklessLedDriver_waitDisp);
+                 
+        }
+    
+        
+    }
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
 {
 #ifdef DO_NOT_USE_INTERUPT
@@ -1306,8 +1358,8 @@ static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg)
 if(!cont->__enableDriver)
 {
      REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
-     ((I2SClocklessLedDriver *)arg)->i2sStop();
-     
+    // ((I2SClocklessLedDriver *)arg)->i2sStop();
+     i2sStop(cont);
      return;
 }
     if (GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ST_S, I2S_OUT_EOF_INT_ST_S))
@@ -1343,7 +1395,8 @@ if(!cont->__enableDriver)
 
     if (GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ST_S, I2S_OUT_TOTAL_EOF_INT_ST_S))
     {           
-        ((I2SClocklessLedDriver *)arg)->i2sStop();
+       // ((I2SClocklessLedDriver *)arg)->i2sStop();
+         i2sStop(cont);
         if (cont->isWaiting)
         {
             portBASE_TYPE HPTaskAwoken = 0;
