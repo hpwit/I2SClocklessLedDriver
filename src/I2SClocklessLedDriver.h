@@ -1097,6 +1097,8 @@ void createhardwareMap()
             #endif
 }
 
+
+
     void __initled(uint8_t *leds, int *Pinsq, int num_strips, int num_led_per_strip)
     {
         _gammab = 1;
@@ -1124,11 +1126,13 @@ void createhardwareMap()
 
 
 #ifdef __HARDWARE_MAP
-
+#ifndef __NON_HEAP
     _hmap=(uint16_t *)malloc(  total_leds * 2);
+#endif
     if(!_hmap)
     {
         ESP_LOGE(TAG,"no memory for the hamp");
+        return;
     }
     else
     {
