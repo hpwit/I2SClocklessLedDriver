@@ -1087,7 +1087,7 @@ void createhardwareMap()
                  {
                     if(leddisp<stripSize[i])
                     {
-                        ESP_LOGE(TAG,"%d :%d\r\n",leddisp+offset,mapLed(leddisp+offset));
+                       // ESP_LOGE(TAG,"%d :%d\r\n",leddisp+offset,mapLed(leddisp+offset));
                          _hmap[offset2]=mapLed(leddisp+offset)*nb_components;
                          offset+=stripSize[i];
                          offset2++;
