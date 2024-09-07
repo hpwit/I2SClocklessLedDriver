@@ -10,6 +10,7 @@
   },
   "version": "1.0.0",
   "frameworks": "arduino",
-  "platforms": "*"
+  "platforms": "*",
+  "headers": "I2SClocklessLedDriver.h"
 }
 
