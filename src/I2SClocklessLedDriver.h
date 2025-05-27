@@ -56,6 +56,7 @@
 #define FF (0xF0F0F0F0L)
 #define FF2 (0x0F0F0F0FL)
 
+#undef MIN //also in FastLED
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 
 #ifndef HARDWARESPRITES
@@ -162,7 +163,8 @@ struct OffsetDisplay
     int panel_height;
     int panel_width;
 };
-static const char *TAG = "I2SClocklessLedDriver";
+#undef TAG //also set by other libraries
+#define TAG "I2SClocklessLedDriver" //ML: instead of static const char *TAG = "I2SClocklessLedDriver";
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
 /*
