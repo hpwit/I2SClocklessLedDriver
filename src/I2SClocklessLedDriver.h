@@ -162,7 +162,7 @@ struct OffsetDisplay
     int panel_height;
     int panel_width;
 };
-static const char *TAG = "I2SClocklessLedDriver";
+#define TAG "I2SClocklessLedDriver" //ML: instead of static const char *TAG = "I2SClocklessLedDriver";
 static void IRAM_ATTR _I2SClocklessLedDriverinterruptHandler(void *arg);
 static void IRAM_ATTR transpose16x1_noinline2(unsigned char *A, uint16_t *B);
 /*
