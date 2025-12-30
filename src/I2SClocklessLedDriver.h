@@ -604,7 +604,7 @@ public:
                 secondPixel[p_r].bytes[i] = __red_map[*(poli + 0)];
                 secondPixel[p_b].bytes[i] = __blue_map[*(poli + 2)];
                 if (nb_components > 3)
-                    secondPixel[3].bytes[i] = __white_map[*(poli + 3)];
+                    secondPixel[p_w].bytes[i] = __white_map[*(poli + 3)];
                 //#endif
                 poli += num_led_per_strip * nb_components;
             }
@@ -1520,7 +1520,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver *driver)//uint8_t *
         secondPixel[driver->p_r].bytes[i] = driver->__red_map[*(poli + 0)];
         secondPixel[driver->p_b].bytes[i] =  driver->__blue_map[*(poli + 2)];
         if (nbcomponents > 3)
-            secondPixel[3].bytes[i] = driver->__white_map[*(poli + 3)];
+            secondPixel[driver->p_w].bytes[i] = driver->__white_map[*(poli + 3)];
         #ifdef __HARDWARE_MAP
             driver->_hmapoff++;
         #endif
