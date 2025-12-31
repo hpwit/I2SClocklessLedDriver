@@ -741,8 +741,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
             secondPixel[p_g].bytes[i] = __green_map[*(poli + 1)];
             secondPixel[p_r].bytes[i] = __red_map[*(poli + 0)];
             secondPixel[p_b].bytes[i] = __blue_map[*(poli + 2)];
-            if (nb_components > 3)
-                secondPixel[3].bytes[i] = __white_map[*(poli + 3)];
+            if (p_w != UINT8_MAX)
+                secondPixel[p_w].bytes[i] = __white_map[*(poli + 3)];
             //#endif
             poli += num_led_per_strip * nb_components;
         }
@@ -750,7 +750,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
         transpose16x1_noinline2(secondPixel[0].bytes, (uint16_t *)DMABuffersTransposed[j + 1]->buffer);
         transpose16x1_noinline2(secondPixel[1].bytes, (uint16_t *)DMABuffersTransposed[j + 1]->buffer + 3 * 8);
         transpose16x1_noinline2(secondPixel[2].bytes, (uint16_t *)DMABuffersTransposed[j + 1]->buffer + 2 * 3 * 8);
-        if (nb_components > 3)
+        if (p_w != UINT8_MAX)
             transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t *)DMABuffersTransposed[j + 1]->buffer + 3 * 3 * 8);
     }*/
     for (int j = 0; j < num_led_per_strip; j++) {
@@ -768,7 +768,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 
   void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue) {
     uint8_t W = 0;
-    if (nb_components > 3) {
+    if (p_w != UINT8_MAX) {
       W = MIN(red, green);
       W = MIN(W, blue);
       red = red - W;
@@ -817,7 +817,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     *((uint16_t*)(B + 17)) = (*((uint16_t*)(B + 17)) & mask) | ((uint16_t)((y & 4) >> 2) << stripNumber);
     *((uint16_t*)(B + 18)) = (*((uint16_t*)(B + 18)) & mask) | ((uint16_t)((y & 2) >> 1) << stripNumber);
     *((uint16_t*)(B + 23)) = (*((uint16_t*)(B + 23)) & mask) | ((uint16_t)(y & 1) << stripNumber);
-    if (nb_components > 3) {
+    if (p_w != UINT8_MAX) {
       B += 3 * 8;
       y = __white_map[white];
       *((uint16_t*)(B)) = (*((uint16_t*)(B)) & mask) | ((uint16_t)((y & 128) >> 7) << stripNumber);
@@ -854,7 +854,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 
   void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
     uint8_t W = 0;
-    if (nb_components > 3) {
+    if (p_w != UINT8_MAX) {
       W = MIN(red, green);
       W = MIN(W, blue);
       red = red - W;
@@ -1788,7 +1788,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       secondPixel[driver->p_g].bytes[i] = driver->__green_map[*(poli + 1)];
       secondPixel[driver->p_r].bytes[i] = driver->__red_map[*(poli + 0)];
       secondPixel[driver->p_b].bytes[i] = driver->__blue_map[*(poli + 2)];
-      if (nbcomponents > 3) secondPixel[3].bytes[i] = driver->__white_map[*(poli + 3)];
+      if (p_w != UINT8_MAX) secondPixel[driver->p_w].bytes[i] = driver->__white_map[*(poli + 3)];
 #ifdef __HARDWARE_MAP
       driver->_hmapoff++;
 #endif
@@ -1808,7 +1808,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   transpose16x1_noinline2(secondPixel[0].bytes, (uint16_t*)buffer);
   transpose16x1_noinline2(secondPixel[1].bytes, (uint16_t*)buffer + 3 * 8);
   transpose16x1_noinline2(secondPixel[2].bytes, (uint16_t*)buffer + 2 * 3 * 8);
-  if (nbcomponents > 3) transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8);
+  if (p_w != UINT8_MAX) transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8);
 }
 
 #endif
