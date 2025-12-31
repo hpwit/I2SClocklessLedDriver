@@ -8,8 +8,8 @@
 //here we have 3 colors per pixel
 uint8_t leds[(LENGTH1 + LENGTH2 + LENGTH3)*3];
 
-int pins[3]={0,2,4};
-int lengths[3]={LENGTH1,LENGTH2,LENGTH3};
+uint8_t pins[3]={0,2,4};
+uint16_t lengths[3]={LENGTH1,LENGTH2,LENGTH3};
 
 I2SClocklessLedDriver driver;
 void setup() {
