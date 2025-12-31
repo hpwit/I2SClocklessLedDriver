@@ -1788,7 +1788,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       secondPixel[driver->p_g].bytes[i] = driver->__green_map[*(poli + 1)];
       secondPixel[driver->p_r].bytes[i] = driver->__red_map[*(poli + 0)];
       secondPixel[driver->p_b].bytes[i] = driver->__blue_map[*(poli + 2)];
-      if (p_w != UINT8_MAX) secondPixel[driver->p_w].bytes[i] = driver->__white_map[*(poli + 3)];
+      if (driver->p_w != UINT8_MAX) secondPixel[driver->p_w].bytes[i] = driver->__white_map[*(poli + 3)];
 #ifdef __HARDWARE_MAP
       driver->_hmapoff++;
 #endif
@@ -1808,7 +1808,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   transpose16x1_noinline2(secondPixel[0].bytes, (uint16_t*)buffer);
   transpose16x1_noinline2(secondPixel[1].bytes, (uint16_t*)buffer + 3 * 8);
   transpose16x1_noinline2(secondPixel[2].bytes, (uint16_t*)buffer + 2 * 3 * 8);
-  if (p_w != UINT8_MAX) transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8);
+  if (driver->p_w != UINT8_MAX) transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8);
 }
 
 #endif
