@@ -73,11 +73,15 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
 
 void I2SClocklessLedDriver::deleteDriver() {
   #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 for PhysicalDriver not supported yet
-  for (int i = 0; i < __NB_DMA_BUFFER + 2; i++) {
-    heap_caps_free(DMABuffersTampon[i]->buffer);
-    heap_caps_free(DMABuffersTampon[i]);
+  if (DMABuffersTampon) {
+    for (int i = 0; i < __NB_DMA_BUFFER + 2; i++) {
+      if (DMABuffersTampon[i]) {
+        if (DMABuffersTampon[i]->buffer) heap_caps_free(DMABuffersTampon[i]->buffer);
+        heap_caps_free(DMABuffersTampon[i]);
+      }
+    }
+    heap_caps_free(DMABuffersTampon);
   }
-  heap_caps_free(DMABuffersTampon);
   #endif
   // anything else to delete? I2S ...
 }
