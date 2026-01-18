@@ -26,6 +26,7 @@ clock_speed clock_800KHZ = {6, 4, 1};
 
 // IDF5.5: updateLeds
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+// 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
 void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w) {
   // do what ledsDriver.initled is doing, except i2sInit
 
@@ -71,6 +72,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   ESP_LOGD(TAG, "updateLeds %d x %d (%d)", num_strips, num_led_per_strip, __NB_DMA_BUFFER);
 }
 
+// 🌙 delete driver when the driver is stopped
 void I2SClocklessLedDriver::deleteDriver() {
   #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 for PhysicalDriver not supported yet
   if (DMABuffersTampon) {

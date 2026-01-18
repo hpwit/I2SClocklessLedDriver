@@ -23,9 +23,9 @@
 
 #include "freertos/FreeRTOS.h"  // #error "include FreeRTOS.h" must appear in source files before "include semphr.h"
 
-// IDF5.5: replace #include driver by #include esp_private
+// IDF5.5: 🌙 replace #include driver by #include esp_private
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  // esp_private needed for gpio_iomux_out (see below)
+  // 🌙 esp_private needed for gpio_iomux_out (see below)
   #include <esp_private/gpio.h>
   #include <esp_private/periph_ctrl.h>
 
@@ -197,14 +197,14 @@ extern clock_speed clock_800KHZ;
 #endif
 // #define FULL_DMA_BUFFER
 
-// IDF5.5: __NB_DMA_BUFFER is #define to allow changing it at runtime
+// IDF5.5: 🌙 __NB_DMA_BUFFER is #define to allow changing it at runtime
 #if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
   #ifndef __NB_DMA_BUFFER
     #define __NB_DMA_BUFFER 6
   #endif
 #endif
 
-#define MAX_PINS 20  // maximum number of pins supported, was 16, set to 20, okay?
+#define MAX_PINS 20  // maximum number of pins supported, 🌙 was 16, set to 20, okay?
 
 typedef union {
   uint8_t bytes[16];
@@ -214,8 +214,7 @@ typedef union {
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 static uint8_t signalsID[MAX_PINS] = {
-    LCD_DATA_OUT0_IDX, LCD_DATA_OUT1_IDX, LCD_DATA_OUT2_IDX,  LCD_DATA_OUT3_IDX,  LCD_DATA_OUT4_IDX,  LCD_DATA_OUT5_IDX,  LCD_DATA_OUT6_IDX,  LCD_DATA_OUT7_IDX,
-    LCD_DATA_OUT8_IDX, LCD_DATA_OUT9_IDX, LCD_DATA_OUT10_IDX, LCD_DATA_OUT11_IDX, LCD_DATA_OUT12_IDX, LCD_DATA_OUT13_IDX, LCD_DATA_OUT14_IDX, LCD_DATA_OUT15_IDX,
+    LCD_DATA_OUT0_IDX, LCD_DATA_OUT1_IDX, LCD_DATA_OUT2_IDX, LCD_DATA_OUT3_IDX, LCD_DATA_OUT4_IDX, LCD_DATA_OUT5_IDX, LCD_DATA_OUT6_IDX, LCD_DATA_OUT7_IDX, LCD_DATA_OUT8_IDX, LCD_DATA_OUT9_IDX, LCD_DATA_OUT10_IDX, LCD_DATA_OUT11_IDX, LCD_DATA_OUT12_IDX, LCD_DATA_OUT13_IDX, LCD_DATA_OUT14_IDX, LCD_DATA_OUT15_IDX,
 
 };
 static gdma_channel_handle_t dma_chan;
@@ -295,7 +294,7 @@ struct LedTiming {
   uint8_t f3;
 };
 
-// IDF5.5: __NB_DMA_BUFFER is variable to allow changing it at runtime (defined in .cpp)
+// IDF5.5: 🌙 __NB_DMA_BUFFER is variable to allow changing it at runtime (defined in .cpp)
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 extern uint8_t __NB_DMA_BUFFER;
 extern uint8_t NUM_STRIPS;
@@ -324,6 +323,7 @@ class I2SClocklessLedDriver {
   uint8_t __white_map[256];
   uint8_t _brightness;
   float _gammar, _gammab, _gammag, _gammaw;
+  bool extractWhiteFromRGB = true;  // 🌙
   intr_handle_t _gI2SClocklessDriver_intr_handle;
   volatile xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
   volatile xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
@@ -345,35 +345,35 @@ class I2SClocklessLedDriver {
 
   volatile uint8_t num_strips;
   volatile uint16_t num_led_per_strip;
-  volatile uint16_t total_leds;
+  volatile uint32_t total_leds;
   // int clock_pin;
   uint8_t p_r, p_g, p_b, p_w;
   int i2s_base_pin_index;
   uint8_t nb_components;  // channels per LED
   uint16_t stripSize[MAX_PINS];
-  uint16_t (*mapLed)(uint16_t led);
+  uint32_t (*mapLed)(uint32_t led);
 
   bool isVirtualDriver = false;  // prepare for virtual driver integration
 
-// IDF5.5: driver class: __delay is variable to allow changing it at runtime
+// IDF5.5: driver class: 🌙 __delay is variable to allow changing it at runtime
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   TickType_t __delay = 0;
 #endif
 
 #ifdef __HARDWARE_MAP
-  uint16_t* _hmap;
-  volatile uint16_t* _hmapoff;
-  void setHmap(uint16_t* map) { _hmap = map; }
+  uint32_t* _hmap;
+  volatile uint32_t* _hmapoff;
+  void setHmap(uint32_t* map) { _hmap = map; }
 #endif
 
 #ifdef __HARDWARE_MAP_PROGMEM
-  const uint16_t* _hmap;
-  volatile uint16_t _hmapoff;
+  const uint32_t* _hmap;
+  volatile uint32_t _hmapoff;
 
-  void setHmap(const uint16_t* map) { _hmap = map; }
+  void setHmap(const uint32_t* map) { _hmap = map; }
 #endif
 
-  void setMapLed(uint16_t (*newMapLed)(uint16_t led)) { mapLed = newMapLed; }
+  void setMapLed(uint32_t (*newMapLed)(uint32_t led)) { mapLed = newMapLed; }
 
   /*
    This flag is used when using the NO_WAIT mode
@@ -400,7 +400,7 @@ class I2SClocklessLedDriver {
         // gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[Pins[i]], PIN_FUNC_GPIO);
         // gpio_hal_func_sel(GPIO_PIN_MUX_REG[Pins[i]], PIN_FUNC_GPIO);
 
-  // IDF5.5: setPins: use gpio_iomux_output instead of gpio_iomux_out suppress warning, ready for idf 6, see https://github.com/espressif/esp-idf/issues/17052
+  // IDF5.5: 🌙 setPins: use gpio_iomux_output instead of gpio_iomux_out suppress warning, ready for idf 6, see https://github.com/espressif/esp-idf/issues/17052
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
       gpio_iomux_output((gpio_num_t)Pins[i], PIN_FUNC_GPIO);
   #else
@@ -484,7 +484,7 @@ class I2SClocklessLedDriver {
     LCD_CAM.lcd_misc.lcd_bk_en = 1;
   // -- Create a semaphore to block execution until all the controllers are done
 
-  // IDF5.5: i2sInit: .isr_cache_safe=true results in Cache disabled but cached memory region accessed crash
+  // IDF5.5: 🌙 i2sInit: .isr_cache_safe=true results in Cache disabled but cached memory region accessed crash
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     gdma_channel_alloc_config_t dma_chan_config = {.sibling_chan = NULL, .direction = GDMA_CHANNEL_DIRECTION_TX, .flags = {.reserve_sibling = 0}};
     // .isr_cache_safe= true}};
@@ -566,8 +566,7 @@ class I2SClocklessLedDriver {
     SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
     SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
     */
-    esp_err_t e =
-        esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM, &_I2SClocklessLedDriverinterruptHandler, this, &_gI2SClocklessDriver_intr_handle);
+    esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3 | ESP_INTR_FLAG_IRAM, &_I2SClocklessLedDriverinterruptHandler, this, &_gI2SClocklessDriver_intr_handle);
 #endif
     // -- Create a semaphore to block execution until all the controllers are done
 
@@ -594,7 +593,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[0]->buffer);
 putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 */
 
-// IDF5.5: initDMABuffers: use heap_caps so it can be freed and reallocated, S3 can have it in PSRAM, D0-wrover not!
+// IDF5.5: 🌙 initDMABuffers: use heap_caps so it can be freed and reallocated, S3 can have it in PSRAM, D0-wrover not!
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   #ifdef CONFIG_IDF_TARGET_ESP32S3
     DMABuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(__NB_DMA_BUFFER + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
@@ -833,8 +832,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 
   void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue, uint8_t white) {
     int stripNumber = -1;
-    int total = 0;
-    int posOnStrip = pos;
+    uint32_t total = 0;
+    uint32_t posOnStrip = pos;
     if (pos > total_leds - 1) {
       printf("Position out of bound %d > %d\n", pos, total_leds - 1);
       return;
@@ -1084,7 +1083,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   }
 
   // initled with custom color arrangement
-  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX) {
+  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, bool extractWhiteFromRGB = false) {
     total_leds = 0;
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = sizes[i];
@@ -1098,6 +1097,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     this->p_g = p_g;
     this->p_b = p_b;
     this->p_w = p_w;
+    this->extractWhiteFromRGB = extractWhiteFromRGB;
     __initled(leds, Pinsq, num_strips, maximum);
   }
 
@@ -1186,9 +1186,9 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
       return;
     }
     ESP_LOGE(TAG, "trying to map2");
-    int offset2 = 0;
-    for (int leddisp = 0; leddisp < num_led_per_strip; leddisp++) {
-      int offset = 0;
+    uint32_t offset2 = 0;
+    for (uint32_t leddisp = 0; leddisp < num_led_per_strip; leddisp++) {
+      uint32_t offset = 0;
       for (int i = 0; i < num_strips; i++) {
         if (leddisp < stripSize[i]) {
           // ESP_LOGE(TAG,"%d :%d",leddisp+offset,mapLed(leddisp+offset));
@@ -1201,7 +1201,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 #endif
   }
 
-// IDF5.5: call setGlobalNumStrips and setShowDelay if num_strips resp. num_led_per_strip is changed after initled
+// IDF5.5: 🌙 call setGlobalNumStrips and setShowDelay if num_strips resp. num_led_per_strip is changed after initled
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   void setGlobalNumStrips() { NUM_STRIPS = num_strips; }
   void setShowDelay() { __delay = (((num_led_per_strip * 125 * 8 * nb_components) / 100000) + 1); }
@@ -1225,7 +1225,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     this->num_strips = num_strips;
     // this->dmaBufferCount = dmaBufferCount;//this doesn't make sense as it is no parameter
 
-// IDF5.5: initled: call setGlobalNumStrips and setShowDelay
+// IDF5.5: 🌙 initled: call setGlobalNumStrips and setShowDelay
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     setGlobalNumStrips();
     setShowDelay();
@@ -1239,7 +1239,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 
 #ifdef __HARDWARE_MAP
   #ifndef __NON_HEAP
-    _hmap = (uint16_t*)malloc(total_leds * 2);
+    _hmap = (uint32_t*)malloc(total_leds * 2);
   #endif
     if (!_hmap) {
       ESP_LOGE(TAG, "no memory for the hamp");
@@ -1274,7 +1274,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     this->num_strips = num_strips;
     // this->dmaBufferCount = dmaBufferCount;
 
-    // IDF5.5: initled: call setGlobalNumStrips and setShowDelay
+    // IDF5.5: 🌙 initled: call setGlobalNumStrips and setShowDelay
     #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
         setGlobalNumStrips();
         setShowDelay();
@@ -1286,10 +1286,11 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     initDMABuffers();
   }
 
-// IDF5.5: updateLeds
+// IDF5.5: 🌙 update and delete
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  // recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
+  // 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
   void updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX);
+  // 🌙 delete driver when the driver is stopped
   void deleteDriver();
 #endif
 
@@ -1302,7 +1303,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   I2SClocklessLedDriverDMABuffer** DMABuffersTransposed = NULL;
   // buffer array for the regular way
 
-  // IDF5.5: initled: DMABuffersTampon dynamically allocated to allow to delete and reallocate with different __NB_DMA_BUFFER value and free memory if needed
+  // IDF5.5: 🌙 initled: DMABuffersTampon dynamically allocated to allow to delete and reallocate with different __NB_DMA_BUFFER value and free memory if needed
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   I2SClocklessLedDriverDMABuffer** DMABuffersTampon = NULL;
   #else
@@ -1625,9 +1626,9 @@ static void IRAM_ATTR transpose16x1_noinline2(unsigned char* A, uint16_t* B) {
 
   y = *(unsigned int*)(A);
 
-// IDF5.5: transpose16x1_noinline2: use NUM_STRIPS global variable, else #define NUMSTRIPS
+// IDF5.5: 🌙 transpose16x1_noinline2: use NUM_STRIPS global variable, else #define NUMSTRIPS
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  // use NUM_STRIPS global variable
+  // 🌙 use NUM_STRIPS global variable
 
   if (NUM_STRIPS > 4) {
     x = *(unsigned int*)(A + 4);
@@ -1785,10 +1786,24 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       poli = driver->leds + pgm_read_word_near(driver->_hmap + driver->_hmapoff);
   #endif
 #endif
-      secondPixel[driver->p_g].bytes[i] = driver->__green_map[*(poli + 1)];
-      secondPixel[driver->p_r].bytes[i] = driver->__red_map[*(poli + 0)];
-      secondPixel[driver->p_b].bytes[i] = driver->__blue_map[*(poli + 2)];
-      if (driver->p_w != UINT8_MAX) secondPixel[driver->p_w].bytes[i] = driver->__white_map[*(poli + 3)];
+      uint8_t red = *(poli + 0);
+      uint8_t green = *(poli + 1);
+      uint8_t blue = *(poli + 2);
+      uint8_t white;
+      // 🌙 extract White from RGB
+      if (driver->p_w != UINT8_MAX) {
+        white = *(poli + 3);
+        if (driver->extractWhiteFromRGB) {
+          white = MIN(MIN(red, green), blue);
+          red -= white;
+          green -= white;
+          blue -= white;
+        }
+      }
+      secondPixel[driver->p_r].bytes[i] = driver->__red_map[red];
+      secondPixel[driver->p_g].bytes[i] = driver->__green_map[green];
+      secondPixel[driver->p_b].bytes[i] = driver->__blue_map[blue];
+      if (driver->p_w != UINT8_MAX) secondPixel[driver->p_w].bytes[i] = driver->__white_map[white];
 #ifdef __HARDWARE_MAP
       driver->_hmapoff++;
 #endif

@@ -2,7 +2,7 @@ BasedOnStyle: Google
 IndentWidth: 2
 TabWidth: 2
 UseTab: Never
-ColumnLimit: 200
+ColumnLimit: 999
 IndentCaseLabels: false
 IndentPPDirectives: BeforeHash
 PPIndentWidth: -1
