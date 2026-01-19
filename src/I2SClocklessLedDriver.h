@@ -736,12 +736,24 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
         uint8_t *poli = leds + ledToDisplay * nb_components;
         for (int i = 0; i < num_strips; i++)
         {
-
-            secondPixel[p_g].bytes[i] = __green_map[*(poli + 1)];
-            secondPixel[p_r].bytes[i] = __red_map[*(poli + 0)];
-            secondPixel[p_b].bytes[i] = __blue_map[*(poli + 2)];
-            if (p_w != UINT8_MAX)
-                secondPixel[p_w].bytes[i] = __white_map[*(poli + 3)];
+            uint8_t red = *(poli + 0);
+            uint8_t green = *(poli + 1);
+            uint8_t blue = *(poli + 2);
+            // 🌙 extract White from RGB
+            if (driver->p_w != UINT8_MAX) {
+              uint8_t white = *(poli + 3);
+              // if white is filled, use that and do not extract rgbw
+              if (driver->extractWhiteFromRGB && !white) {
+                white = MIN(MIN(red, green), blue);
+                red -= white;
+                green -= white;
+                blue -= white;
+              } 
+              secondPixel[driver->p_w].bytes[i] = driver->__white_map[white];
+            }
+            secondPixel[p_r].bytes[i] = __red_map[red];
+            secondPixel[p_g].bytes[i] = __green_map[green];
+            secondPixel[p_b].bytes[i] = __blue_map[blue];
             //#endif
             poli += num_led_per_strip * nb_components;
         }
@@ -882,7 +894,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   }
 
   void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
-    if (nb_components == 3) {
+    if (p_w == UINT8_MAX) {  // no white channel
       uint8_t* offset = leds + (pos << 1) + pos;
       *(offset) = red;
       *(++offset) = green;
@@ -1789,21 +1801,21 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       uint8_t red = *(poli + 0);
       uint8_t green = *(poli + 1);
       uint8_t blue = *(poli + 2);
-      uint8_t white;
       // 🌙 extract White from RGB
       if (driver->p_w != UINT8_MAX) {
-        white = *(poli + 3);
-        if (driver->extractWhiteFromRGB) {
+        uint8_t white = *(poli + 3);
+        // if white is filled, use that and do not extract rgbw
+        if (driver->extractWhiteFromRGB && !white) {
           white = MIN(MIN(red, green), blue);
           red -= white;
           green -= white;
           blue -= white;
-        }
+        } 
+        secondPixel[driver->p_w].bytes[i] = driver->__white_map[white];
       }
       secondPixel[driver->p_r].bytes[i] = driver->__red_map[red];
       secondPixel[driver->p_g].bytes[i] = driver->__green_map[green];
       secondPixel[driver->p_b].bytes[i] = driver->__blue_map[blue];
-      if (driver->p_w != UINT8_MAX) secondPixel[driver->p_w].bytes[i] = driver->__white_map[white];
 #ifdef __HARDWARE_MAP
       driver->_hmapoff++;
 #endif
