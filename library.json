@@ -17,6 +17,7 @@
             "-<main.cpp>",
             "-<examples/>"
         ]
-    }
+    },
+  "headers": "I2SClocklessLedDriver.h"
 }
 

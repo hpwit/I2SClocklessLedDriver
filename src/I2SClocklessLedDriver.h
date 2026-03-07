@@ -167,7 +167,7 @@ extern clock_speed clock_800KHZ;
 #define FF2 (0x0F0F0F0FL)
 
 #ifndef MIN
-  #define MIN(a, b) (((a) < (b)) ? (a) : (b))
+#define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
 #ifndef HARDWARESPRITES
@@ -429,17 +429,17 @@ class I2SClocklessLedDriver {
     }
   }
 
-  void setGamma(float gammar, float gammab, float gammag, float gammaw) {
-    _gammag = gammag;
+  void setGamma(float gammar, float gammag, float gammab, float gammaw) {
     _gammar = gammar;
-    _gammaw = gammaw;
+    _gammag = gammag;
     _gammab = gammab;
+    _gammaw = gammaw;
     setBrightness(_brightness);
   }
 
-  void setGamma(float gammar, float gammab, float gammag) {
-    _gammag = gammag;
+  void setGamma(float gammar, float gammag, float gammab) {
     _gammar = gammar;
+    _gammag = gammag;
     _gammab = gammab;
     setBrightness(_brightness);
   }
@@ -667,8 +667,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     if (dispmode == WAIT) {
       isWaiting = true;
       if (I2SClocklessLedDriver_sem == NULL) I2SClocklessLedDriver_sem = xSemaphoreCreateBinary();
-      if (xSemaphoreTake(I2SClocklessLedDriver_sem, pdMS_TO_TICKS(100)) == pdFALSE) {
-        ESP_LOGE("TAG", "I2SClocklessLedDriver_sem wait too long");
+      if (xSemaphoreTake(I2SClocklessLedDriver_sem, pdMS_TO_TICKS(500)) == pdFALSE) {
+        ESP_LOGW("TAG", "I2SClocklessLedDriver_sem wait too long");
         xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
       }
     }
@@ -694,8 +694,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
       wasWaitingtofinish = true;
       tmp_leds = new_leds;
       if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
-      if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(100)) == pdFALSE) {
-        ESP_LOGE("TAG", "I2SClocklessLedDriver_waitDisp wait too long");
+      if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
+        ESP_LOGW("TAG", "I2SClocklessLedDriver_waitDisp wait too long");
         xSemaphoreTake(I2SClocklessLedDriver_waitDisp, portMAX_DELAY);
       }
     }
@@ -716,8 +716,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
       Serial.println("we are here");
       wasWaitingtofinish = true;
       if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
-      if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(100)) == pdFALSE) {
-        ESP_LOGE("TAG", "I2SClocklessLedDriver_waitDisp wait too long");
+      if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
+        ESP_LOGW("TAG", "I2SClocklessLedDriver_waitDisp wait too long");
         xSemaphoreTake(I2SClocklessLedDriver_waitDisp, portMAX_DELAY);
       }
     }
@@ -879,8 +879,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   void initled(uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) { initled(NULL, Pinsq, num_strips, num_led_per_strip); }
   void waitSync() {
     I2SClocklessLedDriver_semSync = xSemaphoreCreateBinary();
-    if (xSemaphoreTake(I2SClocklessLedDriver_semSync, pdMS_TO_TICKS(100)) == pdFALSE) {
-      ESP_LOGE("TAG", "I2SClocklessLedDriver_semSync wait too long");
+    if (xSemaphoreTake(I2SClocklessLedDriver_semSync, pdMS_TO_TICKS(500)) == pdFALSE) {
+      ESP_LOGW("TAG", "I2SClocklessLedDriver_semSync wait too long");
       xSemaphoreTake(I2SClocklessLedDriver_semSync, portMAX_DELAY);
     }
   }
@@ -1041,8 +1041,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     if (__displayMode == WAIT) {
       isWaiting = true;
       if (I2SClocklessLedDriver_sem == NULL) I2SClocklessLedDriver_sem = xSemaphoreCreateBinary();
-      if (xSemaphoreTake(I2SClocklessLedDriver_sem, pdMS_TO_TICKS(100)) == pdFALSE) {
-        ESP_LOGE("TAG", "I2SClocklessLedDriver_sem wait too long");
+      if (xSemaphoreTake(I2SClocklessLedDriver_sem, pdMS_TO_TICKS(500)) == pdFALSE) {
+        ESP_LOGW("TAG", "I2SClocklessLedDriver_sem wait too long");
         xSemaphoreTake(I2SClocklessLedDriver_sem, portMAX_DELAY);
       }
     } else {

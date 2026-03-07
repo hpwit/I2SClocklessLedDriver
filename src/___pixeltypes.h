@@ -10,7 +10,7 @@
 
 struct Pixel {
   union {
-    uint8_t raw[3];
+    uint8_t raw[4];
     struct {
       uint8_t red;
       uint8_t green;
@@ -123,7 +123,7 @@ class Pixels {
 
     // parent=rhs.parent;
   }
-  Pixels(int size, Pixel* ledpoi) { Pixels(size, ledpoi, leddirection::FORWARD); }
+  Pixels(int size, Pixel* ledpoi) { __Pixels(size, ledpoi, leddirection::FORWARD, this); }
 
   Pixels(int size, Pixel* ledpoi, leddirection direction) { __Pixels(size, ledpoi, direction, this); }
 
@@ -145,8 +145,11 @@ class Pixels {
 
   Pixels(int* sizes, int num_strips) { __Pixels(sizes, num_strips, leddirection::FORWARD, this); }
 
+  bool localLedPointer = false;
+
   Pixels(int* sizes, int num_strips, leddirection direction) { __Pixels(sizes, num_strips, direction, this); }
   void __Pixels(int* sizes, int num_strips, leddirection direction, Pixels* pib) {
+    if (num_strips > 16) num_strips = 16;  // Clamp to array size
     int size = 0;
     for (int i = 0; i < num_strips; i++) {
       size += sizes[i];
@@ -156,6 +159,7 @@ class Pixels {
     pib->_num_strips = num_strips;
 
     ledpointer = (Pixel*)calloc(size, sizeof(Pixel));
+    localLedPointer = true;
     if (ledpointer == NULL) {
       pib->_size = 0;
     } else {
@@ -163,6 +167,20 @@ class Pixels {
     }
     pib->_direction = direction;
   }
+
+  ~Pixels() {
+    // Only free if we allocated (when _num_strips > 0 indicates we used the array constructor)
+    // Note: Need a flag to track ownership since some constructors take external pointers
+    if (arguments != nullptr) {
+      free(arguments);
+      arguments = nullptr;
+    }
+    if (localLedPointer && ledpointer) {
+      free(ledpointer);
+      ledpointer = nullptr;
+    }
+  }
+
   Pixel& operator[](int i) {
     switch (_direction) {
     case (leddirection::FORWARD):
@@ -182,7 +200,7 @@ class Pixels {
         if (offset == _OUT_OF_BOUND) {
           return offPixel;
         } else
-          return *(ledpointer + (mapFunction(i, arguments) % _size));
+          return *(ledpointer + (offset % _size));
       }
 
       else
@@ -210,8 +228,13 @@ class Pixels {
 
   Pixels getStrip(int num_strip, leddirection direction) {
     if (_num_strips == 0 or _num_strips < num_strip) {
-      int d[0];
-      return Pixels(d, 1, direction);
+      // Return empty Pixels object
+      Pixels empty;
+      empty._size = 0;
+      empty._num_strips = 0;
+      empty._direction = direction;
+      empty.ledpointer = nullptr;
+      return empty;
     } else {
       uint32_t off = 0;
       for (int i = 0; i < num_strip % _num_strips; i++) {
@@ -234,7 +257,7 @@ class Pixels {
 
   Pixels createSubset(int start, leddirection direction) {
     if (start < 0) start = 0;
-    return Pixels(_size, ledpointer + start, direction);
+    return Pixels(_size - start, ledpointer + start, direction);
   }
 
   Pixels createSubset(int start, int length, leddirection direction) {
@@ -256,21 +279,22 @@ class Pixels {
       */
   inline void setMapFunction(int (*fptr)(int i, void* args), void* args, int size) {
     mapFunction = fptr;
-    if (arguments == NULL) arguments = (void*)malloc(sizeof(size));
+    if (arguments != NULL) free(arguments);
+    arguments = (void*)malloc(size);
     memcpy(arguments, args, size);
   }
 
  private:
-  Pixel* ledpointer;
+  Pixel* ledpointer = nullptr;
   size_t _size = 0;
   int _sizes[16];
   int _num_strips = 0;
-  leddirection _direction;
+  leddirection _direction = leddirection::FORWARD;;
   // int nb_child;
   //  Pixels *parent;
-  void* arguments;
+  void* arguments = nullptr;
   // Pixels **children;
-  int (*mapFunction)(int i, void* args);
+  int (*mapFunction)(int i, void* args) = nullptr;
   /*
    * this is the pixel to retuen when out of bound
    */

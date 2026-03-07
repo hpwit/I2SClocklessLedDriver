@@ -27,7 +27,7 @@ void loop() {
     for(int j=0;j<NUMSTRIPS;j++)
     {
         
-        for(int i=0;i<lengths[i];i++)
+        for(int i=0;i<lengths[j];i++)
         {
             //driver.strip(j) return the pointer to the strip j
           

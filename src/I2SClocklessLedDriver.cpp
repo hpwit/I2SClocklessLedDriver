@@ -80,9 +80,11 @@ void I2SClocklessLedDriver::deleteDriver() {
       if (DMABuffersTampon[i]) {
         if (DMABuffersTampon[i]->buffer) heap_caps_free(DMABuffersTampon[i]->buffer);
         heap_caps_free(DMABuffersTampon[i]);
+        DMABuffersTampon[i] = nullptr;
       }
     }
     heap_caps_free(DMABuffersTampon);
+    DMABuffersTampon = nullptr;
   }
   #endif
   // anything else to delete? I2S ...

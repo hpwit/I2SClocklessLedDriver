@@ -14,8 +14,9 @@
 #endif
 
 static int _spritenumber;
-uint16_t* target;  // to be sized in the main
-uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_componentss];
+static uint16_t* target;  // to be sized in the main
+static uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_componentss];
+
 class hardwareSprite {
  public:
   hardwareSprite() {
@@ -31,7 +32,7 @@ class hardwareSprite {
   int posY = 0;
 
   int offset(int x, int y, int width, int height) {
-    if ((posX + x) >= width or (posX + x) < 0 or (posY + y) >= height or (posY + y) < 0) {
+    if ((posX + x) >= width || (posX + x) < 0 || (posY + y) >= height || (posY + y) < 0) {
       // Serial.printf("%d %d,%d %d ",x,y,posX+x,posY+y);
       // Serial.println("out");
       return -1;
@@ -60,8 +61,7 @@ class hardwareSprite {
         for (int j = 0; j < SPRITE_HEIGHT; j++) {
           if (leds[j * SPRITE_WIDTH + i] != transparentColor) {
             int _offset = offset(i, j, width, height);
-            if (_offset >= 0 and _offset < width * height)
-              target[_offset] = (uint16_t)(((j * SPRITE_WIDTH + i) + spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT) * nb_componentss + 1);  // if 0 then no print
+            if (_offset >= 0 && _offset < width * height) target[_offset] = (uint16_t)(((j * SPRITE_WIDTH + i) + spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT) * nb_componentss + 1);  // if 0 then no print
             // else
             //   Serial.printf("%d %d out\n",i,j);
             // lednumber[j * WIDTH + i] = offset(i, j, width, height);
@@ -76,4 +76,4 @@ class hardwareSprite {
   CRGB* leds;
 };
 
-hardwareSprite sprites[NBSPRITE];
+static hardwareSprite sprites[NBSPRITE];
