@@ -2,7 +2,12 @@
 #ifdef USE_FASTLED
   #include "FastLED.h"
 #endif
+
+#ifdef ARDUINO
 #include "Arduino.h"
+#else
+#include "stdint.h"
+#endif
 
 #define _OUT_OF_BOUND -12
 

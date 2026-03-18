@@ -328,10 +328,10 @@ class I2SClocklessLedDriver {
   float _gammar, _gammab, _gammag, _gammaw, _gammaw2;
   bool extractWhiteFromRGB = true;  // 🌙
   intr_handle_t _gI2SClocklessDriver_intr_handle;
-  volatile xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
-  volatile xSemaphoreHandle I2SClocklessLedDriver_semSync = NULL;
-  volatile xSemaphoreHandle I2SClocklessLedDriver_semDisp = NULL;
-  volatile xSemaphoreHandle I2SClocklessLedDriver_waitDisp = NULL;
+  volatile SemaphoreHandle_t I2SClocklessLedDriver_sem = NULL;
+  volatile SemaphoreHandle_t I2SClocklessLedDriver_semSync = NULL;
+  volatile SemaphoreHandle_t I2SClocklessLedDriver_semDisp = NULL;
+  volatile SemaphoreHandle_t I2SClocklessLedDriver_waitDisp = NULL;
   volatile int dmaBufferActive = 0;
   volatile bool wait;
   displayMode __displayMode;
@@ -747,7 +747,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
       return;
     }
     if (isDisplaying == true && dispmode == NO_WAIT) {
-      Serial.println("we are here");
+      // Serial.println("we are here");
       wasWaitingtofinish = true;
       if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
       if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
@@ -896,7 +896,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     uint32_t total = 0;
     uint32_t posOnStrip = pos;
     if (pos > total_leds - 1) {
-      printf("Position out of bound %d > %d\n", pos, total_leds - 1);
+      printf("Position out of bound %lu > %lu\n", pos, total_leds - 1);
       return;
     }
     while (total <= pos) {
