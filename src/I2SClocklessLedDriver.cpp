@@ -27,7 +27,7 @@ clock_speed clock_800KHZ = {6, 4, 1};
 // IDF5.5: updateLeds
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 // 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
-void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w) {
+void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w, uint8_t p_w2) {
   // do what ledsDriver.initled is doing, except i2sInit
 
   // from initled
@@ -44,6 +44,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   this->p_g = p_g;
   this->p_b = p_b;
   this->p_w = p_w;
+  this->p_w2 = p_w2;
 
   // from __initled:
 
@@ -68,6 +69,8 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   __NB_DMA_BUFFER = dmaBuffer;  // set new buffer count
 
   initDMABuffers();  // create them again
+
+  setBrightness(_brightness);  // allocate/free gamma maps based on new p_w
 
   ESP_LOGD(TAG, "updateLeds %d x %d (%d)", num_strips, num_led_per_strip, __NB_DMA_BUFFER);
 }

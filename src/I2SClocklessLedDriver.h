@@ -258,6 +258,8 @@ enum colorarrangment {
   ORDER_GBR,
   ORDER_BRG,
   ORDER_BGR,
+  ORDER_RGBW,
+  ORDER_RGBCCT,
 };
 
 enum displayMode {
@@ -317,12 +319,13 @@ class I2SClocklessLedDriver {
 #ifdef CONFIG_IDF_TARGET_ESP32
   i2s_dev_t* i2s;
 #endif
-  uint8_t __green_map[256];
-  uint8_t __blue_map[256];
-  uint8_t __red_map[256];
-  uint8_t __white_map[256];
+  uint8_t* __green_map = nullptr;
+  uint8_t* __blue_map = nullptr;
+  uint8_t* __red_map = nullptr;
+  uint8_t* __white_map = nullptr;
+  uint8_t* __white2_map = nullptr;
   uint8_t _brightness;
-  float _gammar, _gammab, _gammag, _gammaw;
+  float _gammar, _gammab, _gammag, _gammaw, _gammaw2;
   bool extractWhiteFromRGB = true;  // 🌙
   intr_handle_t _gI2SClocklessDriver_intr_handle;
   volatile xSemaphoreHandle I2SClocklessLedDriver_sem = NULL;
@@ -347,7 +350,7 @@ class I2SClocklessLedDriver {
   volatile uint16_t num_led_per_strip;
   volatile uint32_t total_leds;
   // int clock_pin;
-  uint8_t p_r, p_g, p_b, p_w;
+  uint8_t p_r = 0, p_g = 1, p_b = 2, p_w = UINT8_MAX, p_w2 = UINT8_MAX;
   int i2s_base_pin_index;
   uint8_t nb_components;  // channels per LED
   uint16_t stripSize[MAX_PINS];
@@ -387,6 +390,14 @@ class I2SClocklessLedDriver {
 
   I2SClocklessLedDriver() {};
 
+  ~I2SClocklessLedDriver() {
+    free(__green_map); __green_map = nullptr;
+    free(__blue_map);  __blue_map  = nullptr;
+    free(__red_map);   __red_map   = nullptr;
+    free(__white_map); __white_map = nullptr;
+    free(__white2_map); __white2_map = nullptr;
+  }
+
   void setPins(uint8_t* Pins) {
 #ifdef CONFIG_IDF_TARGET_ESP32
     for (int i = 0; i < num_strips; i++) {
@@ -416,6 +427,21 @@ class I2SClocklessLedDriver {
 
   void setBrightness(int brightness) {
     _brightness = brightness;
+    if (!__green_map) __green_map = (uint8_t*)malloc(256);
+    if (!__blue_map)  __blue_map  = (uint8_t*)malloc(256);
+    if (!__red_map)   __red_map   = (uint8_t*)malloc(256);
+    if (p_w != UINT8_MAX) {
+      if (!__white_map) __white_map = (uint8_t*)malloc(256);
+    } else {
+      free(__white_map);
+      __white_map = nullptr;
+    }
+    if (p_w2 != UINT8_MAX) {
+      if (!__white2_map) __white2_map = (uint8_t*)malloc(256);
+    } else {
+      free(__white2_map);
+      __white2_map = nullptr;
+    }
     float tmp;
     for (int i = 0; i < 256; i++) {
       tmp = powf((float)i / 255, 1 / _gammag);
@@ -424,16 +450,23 @@ class I2SClocklessLedDriver {
       __blue_map[i] = (uint8_t)(tmp * brightness);
       tmp = powf((float)i / 255, 1 / _gammar);
       __red_map[i] = (uint8_t)(tmp * brightness);
-      tmp = powf((float)i / 255, 1 / _gammaw);
-      __white_map[i] = (uint8_t)(tmp * brightness);
+      if (__white_map) {
+        tmp = powf((float)i / 255, 1 / _gammaw);
+        __white_map[i] = (uint8_t)(tmp * brightness);
+      }
+      if (__white2_map) {
+        tmp = powf((float)i / 255, 1 / _gammaw2);
+        __white2_map[i] = (uint8_t)(tmp * brightness);
+      }
     }
   }
 
-  void setGamma(float gammar, float gammag, float gammab, float gammaw) {
+  void setGamma(float gammar, float gammag, float gammab, float gammaw1, float gammaw2 = -1) {
     _gammar = gammar;
     _gammag = gammag;
     _gammab = gammab;
-    _gammaw = gammaw;
+    _gammaw = gammaw1;
+    _gammaw2 = (gammaw2 < 0) ? gammaw1 : gammaw2;
     setBrightness(_brightness);
   }
 
@@ -748,8 +781,11 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
                 red -= white;
                 green -= white;
                 blue -= white;
-              } 
+              }
               secondPixel[driver->p_w].bytes[i] = driver->__white_map[white];
+              if (driver->p_w2 != UINT8_MAX) {
+                secondPixel[driver->p_w2].bytes[i] = driver->__white2_map[*(poli + 4)];
+              }
             }
             secondPixel[p_r].bytes[i] = __red_map[red];
             secondPixel[p_g].bytes[i] = __green_map[green];
@@ -789,7 +825,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     setPixelinBufferByStrip(stripNumber, posOnStrip, red, green, blue, W);
   }
 
-  void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue, uint8_t white) {
+  void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue, uint8_t white, uint8_t white2 = 0) {
     uint16_t mask = ~(1 << stripNumber);
     uint8_t colors[3];
     colors[p_g] = __green_map[green];
@@ -831,6 +867,18 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     if (p_w != UINT8_MAX) {
       B += 3 * 8;
       y = __white_map[white];
+      *((uint16_t*)(B)) = (*((uint16_t*)(B)) & mask) | ((uint16_t)((y & 128) >> 7) << stripNumber);
+      *((uint16_t*)(B + 5)) = (*((uint16_t*)(B + 5)) & mask) | ((uint16_t)((y & 64) >> 6) << stripNumber);
+      *((uint16_t*)(B + 6)) = (*((uint16_t*)(B + 6)) & mask) | ((uint16_t)((y & 32) >> 5) << stripNumber);
+      *((uint16_t*)(B + 11)) = (*((uint16_t*)(B + 11)) & mask) | ((uint16_t)((y & 16) >> 4) << stripNumber);
+      *((uint16_t*)(B + 12)) = (*((uint16_t*)(B + 12)) & mask) | ((uint16_t)((y & 8) >> 3) << stripNumber);
+      *((uint16_t*)(B + 17)) = (*((uint16_t*)(B + 17)) & mask) | ((uint16_t)((y & 4) >> 2) << stripNumber);
+      *((uint16_t*)(B + 18)) = (*((uint16_t*)(B + 18)) & mask) | ((uint16_t)((y & 2) >> 1) << stripNumber);
+      *((uint16_t*)(B + 23)) = (*((uint16_t*)(B + 23)) & mask) | ((uint16_t)(y & 1) << stripNumber);
+    }
+    if (p_w2 != UINT8_MAX) {
+      B += 3 * 8;
+      y = __white2_map[white2];
       *((uint16_t*)(B)) = (*((uint16_t*)(B)) & mask) | ((uint16_t)((y & 128) >> 7) << stripNumber);
       *((uint16_t*)(B + 5)) = (*((uint16_t*)(B + 5)) & mask) | ((uint16_t)((y & 64) >> 6) << stripNumber);
       *((uint16_t*)(B + 6)) = (*((uint16_t*)(B + 6)) & mask) | ((uint16_t)((y & 32) >> 5) << stripNumber);
@@ -1091,11 +1139,12 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     p_g = 0;
     p_b = 2;
     p_w = UINT8_MAX;
+    p_w2 = UINT8_MAX;
     __initled(leds, Pinsq, num_strips, maximum);
   }
 
   // initled with custom color arrangement
-  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, bool extractWhiteFromRGB = false) {
+  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, uint8_t p_w2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
     total_leds = 0;
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = sizes[i];
@@ -1109,6 +1158,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     this->p_g = p_g;
     this->p_b = p_b;
     this->p_w = p_w;
+    this->p_w2 = p_w2;
     this->extractWhiteFromRGB = extractWhiteFromRGB;
     __initled(leds, Pinsq, num_strips, maximum);
   }
@@ -1129,6 +1179,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     uint16_t maximum = maxLength(sizes, num_strips);
 
     p_w = UINT8_MAX;
+    p_w2 = UINT8_MAX;
     switch (cArr) {
     case ORDER_RGB:
       nb_components = 3;
@@ -1172,6 +1223,21 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
       p_g = 0;
       p_b = 2;
       p_w = 3;
+      break;
+    case ORDER_RGBW:
+      nb_components = 4;
+      p_r = 0;
+      p_g = 1;
+      p_b = 2;
+      p_w = 3;
+      break;
+    case ORDER_RGBCCT:
+      nb_components = 5;
+      p_r = 0;
+      p_g = 1;
+      p_b = 2;
+      p_w = 3;
+      p_w2 = 4;
       break;
     }
     __initled(leds, Pinsq, num_strips, maximum);
@@ -1224,6 +1290,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     _gammar = 1;
     _gammag = 1;
     _gammaw = 1;
+    _gammaw2 = 1;
     startleds = 0;
     this->leds = leds;
     this->saveleds = leds;
@@ -1301,7 +1368,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 // IDF5.5: 🌙 update and delete
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   // 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
-  void updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX);
+  void updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, uint8_t p_w2 = UINT8_MAX);
   // 🌙 delete driver when the driver is stopped
   void deleteDriver();
 #endif
@@ -1810,8 +1877,11 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
           red -= white;
           green -= white;
           blue -= white;
-        } 
+        }
         secondPixel[driver->p_w].bytes[i] = driver->__white_map[white];
+        if (driver->p_w2 != UINT8_MAX) {
+          secondPixel[driver->p_w2].bytes[i] = driver->__white2_map[*(poli + 4)];
+        }
       }
       secondPixel[driver->p_r].bytes[i] = driver->__red_map[red];
       secondPixel[driver->p_g].bytes[i] = driver->__green_map[green];
@@ -1836,6 +1906,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   transpose16x1_noinline2(secondPixel[1].bytes, (uint16_t*)buffer + 3 * 8);
   transpose16x1_noinline2(secondPixel[2].bytes, (uint16_t*)buffer + 2 * 3 * 8);
   if (driver->p_w != UINT8_MAX) transpose16x1_noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8);
+  if (driver->p_w2 != UINT8_MAX) transpose16x1_noinline2(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8);
 }
 
 #endif
