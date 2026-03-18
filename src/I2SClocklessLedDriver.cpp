@@ -28,6 +28,11 @@ clock_speed clock_800KHZ = {6, 4, 1};
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 // 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
 void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w, uint8_t p_w2) {
+  if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
+    ESP_LOGE(TAG, "updateDriver: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
+    return;
+  }
+
   // do what ledsDriver.initled is doing, except i2sInit
 
   // from initled
@@ -64,6 +69,15 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
 
   // i2sInit(); //not necessary, initled did it, no need to change
 
+  // Wait for any in-progress DMA transfer to complete before freeing buffers.
+  if (isDisplaying) {
+    if (I2SClocklessLedDriver_waitDisp == NULL)
+      I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
+    if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
+      ESP_LOGW(TAG, "updateDriver: timeout waiting for DMA to idle, proceeding anyway");
+    }
+  }
+
   deleteDriver();  // free previous allocations
 
   __NB_DMA_BUFFER = dmaBuffer;  // set new buffer count
@@ -90,7 +104,29 @@ void I2SClocklessLedDriver::deleteDriver() {
     DMABuffersTampon = nullptr;
   }
   #endif
-  // anything else to delete? I2S ...
+
+#ifdef FULL_DMA_BUFFER
+  if (DMABuffersTransposed) {
+    for (int i = 0; i < num_led_per_strip + 2; i++) {
+      if (DMABuffersTransposed[i]) {
+        if (DMABuffersTransposed[i]->buffer) heap_caps_free(DMABuffersTransposed[i]->buffer);
+        heap_caps_free(DMABuffersTransposed[i]);
+        DMABuffersTransposed[i] = nullptr;
+      }
+    }
+    free(DMABuffersTransposed);
+    DMABuffersTransposed = nullptr;
+  }
+#endif
+
+#ifdef __HARDWARE_MAP
+  #ifndef __NON_HEAP
+  if (_hmap) {
+    free(_hmap);
+    _hmap = nullptr;
+  }
+  #endif
+#endif
 }
 
 #endif

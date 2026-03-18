@@ -391,10 +391,11 @@ class I2SClocklessLedDriver {
   I2SClocklessLedDriver() {};
 
   ~I2SClocklessLedDriver() {
-    free(__green_map); __green_map = nullptr;
-    free(__blue_map);  __blue_map  = nullptr;
-    free(__red_map);   __red_map   = nullptr;
-    free(__white_map); __white_map = nullptr;
+    deleteDriver();
+    free(__green_map);  __green_map  = nullptr;
+    free(__blue_map);   __blue_map   = nullptr;
+    free(__red_map);    __red_map    = nullptr;
+    free(__white_map);  __white_map  = nullptr;
     free(__white2_map); __white2_map = nullptr;
   }
 
@@ -1126,6 +1127,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 #endif
   // initled with default color arrangement GRB
   void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips) {
+    if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
+      ESP_LOGE(TAG, "initled: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
+      return;
+    }
     total_leds = 0;
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = sizes[i];
@@ -1145,6 +1150,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 
   // initled with custom color arrangement
   void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, uint8_t p_w2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
+    if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
+      ESP_LOGE(TAG, "initled: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
+      return;
+    }
     total_leds = 0;
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = sizes[i];
@@ -1164,6 +1173,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   }
 
   void initled(uint8_t* leds, uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) {
+    if (Pinsq == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
+      ESP_LOGE(TAG, "initled: invalid args num_strips=%u Pinsq=%p", num_strips, (void*)Pinsq);
+      return;
+    }
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = num_led_per_strip;
     }
@@ -1171,6 +1184,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   }
 
   void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, colorarrangment cArr) {
+    if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
+      ESP_LOGE(TAG, "initled: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
+      return;
+    }
     total_leds = 0;
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = sizes[i];
