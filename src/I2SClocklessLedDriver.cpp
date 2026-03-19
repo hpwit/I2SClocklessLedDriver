@@ -75,16 +75,16 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
 
   __NB_DMA_BUFFER = dmaBuffer;  // set new buffer count
 
-  initDMABuffers();  // create them again
-
-  // Update color component assignments and gamma maps atomically after DMA is
-  // reconfigured, so loadAndTranspose never sees p_w != UINT8_MAX with a null __white_map.
+  // Update color component assignments and gamma maps atomically so loadAndTranspose never sees p_w != UINT8_MAX with a null __white_map.
   this->nb_components = nb_components;
   this->p_r = p_r;
   this->p_g = p_g;
   this->p_b = p_b;
   this->p_w = p_w;
   this->p_w2 = p_w2;
+
+  initDMABuffers();  // create them again (needs nb_components for buffer sizing)
+
   setBrightness(_brightness);  // allocate/free gamma maps based on new p_w
 
   ESP_LOGD(TAG, "updateLeds %d x %d (%d)", num_strips, num_led_per_strip, __NB_DMA_BUFFER);
