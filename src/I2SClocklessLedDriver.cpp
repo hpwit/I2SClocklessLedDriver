@@ -44,13 +44,6 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   }
   uint16_t num_led_per_strip = maxLength(sizes, num_strips);
 
-  this->nb_components = nb_components;
-  this->p_r = p_r;
-  this->p_g = p_g;
-  this->p_b = p_b;
-  this->p_w = p_w;
-  this->p_w2 = p_w2;
-
   // from __initled:
 
   this->num_led_per_strip = num_led_per_strip;
@@ -71,10 +64,10 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
 
   // Wait for any in-progress DMA transfer to complete before freeing buffers.
   if (isDisplaying) {
-    if (I2SClocklessLedDriver_waitDisp == NULL)
-      I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
+    if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
     if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
-      ESP_LOGW(TAG, "updateDriver: timeout waiting for DMA to idle, proceeding anyway");
+      ESP_LOGE(TAG, "updateDriver: timeout waiting for DMA to idle, aborting reconfiguration");
+      return;
     }
   }
 
@@ -84,6 +77,14 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
 
   initDMABuffers();  // create them again
 
+  // Update color component assignments and gamma maps atomically after DMA is
+  // reconfigured, so loadAndTranspose never sees p_w != UINT8_MAX with a null __white_map.
+  this->nb_components = nb_components;
+  this->p_r = p_r;
+  this->p_g = p_g;
+  this->p_b = p_b;
+  this->p_w = p_w;
+  this->p_w2 = p_w2;
   setBrightness(_brightness);  // allocate/free gamma maps based on new p_w
 
   ESP_LOGD(TAG, "updateLeds %d x %d (%d)", num_strips, num_led_per_strip, __NB_DMA_BUFFER);
@@ -105,7 +106,7 @@ void I2SClocklessLedDriver::deleteDriver() {
   }
   #endif
 
-#ifdef FULL_DMA_BUFFER
+  #ifdef FULL_DMA_BUFFER
   if (DMABuffersTransposed) {
     for (int i = 0; i < num_led_per_strip + 2; i++) {
       if (DMABuffersTransposed[i]) {
@@ -117,16 +118,28 @@ void I2SClocklessLedDriver::deleteDriver() {
     free(DMABuffersTransposed);
     DMABuffersTransposed = nullptr;
   }
-#endif
+  #endif
 
-#ifdef __HARDWARE_MAP
-  #ifndef __NON_HEAP
+  #if HARDWARESPRITES == 1
+  if (target) {
+    free(target);
+    target = nullptr;
+  }
+  #endif
+
+  #ifdef __HARDWARE_MAP
+    #ifndef __NON_HEAP
   if (_hmap) {
     free(_hmap);
     _hmap = nullptr;
   }
+    #endif
   #endif
-#endif
+
+  if (I2SClocklessLedDriver_waitDisp) {
+    vSemaphoreDelete(I2SClocklessLedDriver_waitDisp);
+    I2SClocklessLedDriver_waitDisp = NULL;
+  }
 }
 
 #endif
