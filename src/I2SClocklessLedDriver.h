@@ -1619,14 +1619,15 @@ static void IRAM_ATTR i2sStop(I2SClocklessLedDriver* cont) {
 
   cont->isDisplaying = false;
 
+  portBASE_TYPE HPTaskAwoken = 0;
   if (cont->wasWaitingtofinish == true) {
     cont->wasWaitingtofinish = false;
-    xSemaphoreGive(cont->I2SClocklessLedDriver_waitDisp);
+    xSemaphoreGiveFromISR(cont->I2SClocklessLedDriver_waitDisp, &HPTaskAwoken);
   }
   if (cont->isWaiting) {
-    // printf("on debloqu\n");
-    xSemaphoreGive(cont->I2SClocklessLedDriver_sem);
+    xSemaphoreGiveFromISR(cont->I2SClocklessLedDriver_sem, &HPTaskAwoken);
   }
+  if (HPTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
 }
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3

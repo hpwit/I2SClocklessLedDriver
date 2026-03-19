@@ -28,54 +28,52 @@ clock_speed clock_800KHZ = {6, 4, 1};
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 // 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
 void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w, uint8_t p_w2) {
-  if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
-    ESP_LOGE(TAG, "updateDriver: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
+  if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS || dmaBuffer == 0) {
+    ESP_LOGE(TAG, "updateDriver: invalid args num_strips=%u dmaBuffer=%u sizes=%p Pinsq=%p", num_strips, dmaBuffer, (void*)sizes, (void*)Pinsq);
     return;
   }
 
-  // do what ledsDriver.initled is doing, except i2sInit
+  // Compute new geometry locally so deleteDriver() still sees the old
+  // this->num_led_per_strip (used as a loop bound for FULL_DMA_BUFFER frees).
+  uint16_t new_num_led_per_strip = maxLength(sizes, num_strips);
 
-  // from initled
+  // Wait for any in-progress DMA transfer to complete before freeing buffers.
+  // Do this before mutating any members so a timeout leaves the object consistent.
+  if (isDisplaying) {
+    if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
+    if (I2SClocklessLedDriver_waitDisp == NULL) {
+      ESP_LOGE(TAG, "updateDriver: failed to create waitDisp semaphore, aborting");
+      return;
+    }
+    if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
+      ESP_LOGE(TAG, "updateDriver: timeout waiting for DMA to idle, aborting reconfiguration");
+      return;  // members unchanged — old DMA state remains consistent
+    }
+  }
+
+  deleteDriver();  // uses old num_led_per_strip and __NB_DMA_BUFFER as loop bounds
+
+  // Now safe to apply all new geometry and configuration.
   this->num_strips = num_strips;
   total_leds = 0;
   for (int i = 0; i < num_strips; i++) {
     stripSize[i] = sizes[i];
     total_leds += sizes[i];
   }
-  uint16_t num_led_per_strip = maxLength(sizes, num_strips);
-
-  // from __initled:
-
-  this->num_led_per_strip = num_led_per_strip;
+  this->num_led_per_strip = new_num_led_per_strip;
   _offsetDisplay.offsetx = 0;
   _offsetDisplay.offsety = 0;
-  _offsetDisplay.panel_width = num_led_per_strip;
+  _offsetDisplay.panel_width = new_num_led_per_strip;
   _offsetDisplay.panel_height = 9999;
   _defaultOffsetDisplay = _offsetDisplay;
-  linewidth = num_led_per_strip;
+  linewidth = new_num_led_per_strip;
 
-  // setShowDelay(num_led_per_strip);
   setShowDelay();
   setGlobalNumStrips();
+  setPins(Pinsq);
 
-  setPins(Pinsq);  // if pins and lengths changed, set that right
+  __NB_DMA_BUFFER = dmaBuffer;
 
-  // i2sInit(); //not necessary, initled did it, no need to change
-
-  // Wait for any in-progress DMA transfer to complete before freeing buffers.
-  if (isDisplaying) {
-    if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
-    if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
-      ESP_LOGE(TAG, "updateDriver: timeout waiting for DMA to idle, aborting reconfiguration");
-      return;
-    }
-  }
-
-  deleteDriver();  // free previous allocations
-
-  __NB_DMA_BUFFER = dmaBuffer;  // set new buffer count
-
-  // Update color component assignments and gamma maps atomically so loadAndTranspose never sees p_w != UINT8_MAX with a null __white_map.
   this->nb_components = nb_components;
   this->p_r = p_r;
   this->p_g = p_g;
@@ -83,7 +81,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   this->p_w = p_w;
   this->p_w2 = p_w2;
 
-  initDMABuffers();  // create them again (needs nb_components for buffer sizing)
+  initDMABuffers();  // needs nb_components and num_led_per_strip for buffer sizing
 
   setBrightness(_brightness);  // allocate/free gamma maps based on new p_w
 
