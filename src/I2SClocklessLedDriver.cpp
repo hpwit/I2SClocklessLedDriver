@@ -11,11 +11,8 @@
 
 #include "I2SClocklessLedDriver.h"
 
-// IDF5.5: __NB_DMA_BUFFER and NUM_STRIPS are global variables to allow changing it at runtime
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 uint8_t __NB_DMA_BUFFER = 6;
 uint8_t NUM_STRIPS = 16;
-#endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 clock_speed clock_1123KHZ = {4, 20, 9};
@@ -24,9 +21,7 @@ clock_speed clock_1000KHZ = {5, 1, 0};
 clock_speed clock_800KHZ = {6, 4, 1};
 #endif
 
-// IDF5.5: updateLeds
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-// 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
+// update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
 void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w, uint8_t p_w2) {
   if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS || dmaBuffer == 0) {
     ESP_LOGE(TAG, "updateDriver: invalid args num_strips=%u dmaBuffer=%u sizes=%p Pinsq=%p", num_strips, dmaBuffer, (void*)sizes, (void*)Pinsq);
@@ -40,8 +35,10 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   // Wait for any in-progress DMA transfer to complete before freeing buffers.
   // Do this before mutating any members so a timeout leaves the object consistent.
   if (isDisplaying) {
+    wasWaitingtofinish = true;
     if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
     if (I2SClocklessLedDriver_waitDisp == NULL) {
+      wasWaitingtofinish = false;
       ESP_LOGE(TAG, "updateDriver: failed to create waitDisp semaphore, aborting");
       return;
     }
@@ -139,5 +136,3 @@ void I2SClocklessLedDriver::deleteDriver() {
     I2SClocklessLedDriver_waitDisp = NULL;
   }
 }
-
-#endif

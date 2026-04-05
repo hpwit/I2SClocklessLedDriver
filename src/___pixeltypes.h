@@ -290,6 +290,10 @@ class Pixels {
     mapFunction = fptr;
     if (arguments != NULL) free(arguments);
     arguments = (void*)malloc(size);
+    if (arguments == NULL) {
+      mapFunction = nullptr;  // Can't use mapping without arguments
+      return;
+    }
     memcpy(arguments, args, size);
   }
 

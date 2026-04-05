@@ -23,33 +23,13 @@
 
 #include "freertos/FreeRTOS.h"  // #error "include FreeRTOS.h" must appear in source files before "include semphr.h"
 
-// IDF5.5: 🌙 replace #include driver by #include esp_private
+// IDF5.5: replace #include driver by #include esp_private
 #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  // 🌙 esp_private needed for gpio_iomux_out (see below)
   #include <esp_private/gpio.h>
   #include <esp_private/periph_ctrl.h>
-
-// NUM_LEDS_PER_STRIP not needed for physical driver as we set the __delay dynamically (Virtual driver check if it can be a variable)
-// plus NUM_LEDS_PER_STRIP can not always be set before .h is loaded (it is loaded when .cpp is loaded)
-// same for NUMSTRIPS, set as global variable (as needed by global function transpose16x1_noinline2)
-// setGlobalNumStrips sets NUM_STRIPS dynamically
-// setShowDelay sets (__delay) dynamically
 #else
   #include <driver/periph_ctrl.h>
-
   #include "driver/gpio.h"
-
-  #ifndef NUM_LEDS_PER_STRIP
-    #pragma message "NUM_LEDS_PER_STRIP not defined, using default 256"
-    #define NUM_LEDS_PER_STRIP 256
-  #endif
-
-  #define __delay (((NUM_LEDS_PER_STRIP * 125 * 8 * _nb_components) / 100000) + 1)  // used in waitDisplay
-
-  #ifndef NUMSTRIPS
-    #define NUMSTRIPS 16
-  #endif
-
 #endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
@@ -197,12 +177,6 @@ extern clock_speed clock_800KHZ;
 #endif
 // #define FULL_DMA_BUFFER
 
-// IDF5.5: 🌙 __NB_DMA_BUFFER is #define to allow changing it at runtime
-#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(5, 5, 0)
-  #ifndef __NB_DMA_BUFFER
-    #define __NB_DMA_BUFFER 6
-  #endif
-#endif
 
 #define MAX_PINS 20  // maximum number of pins supported, 🌙 was 16, set to 20, okay?
 
@@ -296,11 +270,8 @@ struct LedTiming {
   uint8_t f3;
 };
 
-// IDF5.5: 🌙 __NB_DMA_BUFFER is variable to allow changing it at runtime (defined in .cpp)
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
 extern uint8_t __NB_DMA_BUFFER;
 extern uint8_t NUM_STRIPS;
-#endif
 
 class I2SClocklessLedDriver {
 #ifdef CONFIG_IDF_TARGET_ESP32
@@ -358,10 +329,7 @@ class I2SClocklessLedDriver {
 
   bool isVirtualDriver = false;  // prepare for virtual driver integration
 
-// IDF5.5: driver class: 🌙 __delay is variable to allow changing it at runtime
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   TickType_t __delay = 0;
-#endif
 
 #ifdef __HARDWARE_MAP
   uint32_t* _hmap;
@@ -642,13 +610,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[0]->buffer);
 putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 */
 
-// IDF5.5: 🌙 initDMABuffers: use heap_caps so it can be freed and reallocated, S3 can have it in PSRAM, D0-wrover not!
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  #ifdef CONFIG_IDF_TARGET_ESP32S3
-    DMABuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(__NB_DMA_BUFFER + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-  #elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
-    DMABuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(__NB_DMA_BUFFER + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
-  #endif
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+  DMABuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(__NB_DMA_BUFFER + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+#elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
+  DMABuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(__NB_DMA_BUFFER + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
@@ -1311,11 +1276,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 #endif
   }
 
-// IDF5.5: 🌙 call setGlobalNumStrips and setShowDelay if num_strips resp. num_led_per_strip is changed after initled
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   void setGlobalNumStrips() { NUM_STRIPS = num_strips; }
   void setShowDelay() { __delay = (((num_led_per_strip * 125 * 8 * nb_components) / 100000) + 1); }
-#endif
 
   void __initled(uint8_t* leds, uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) {
     _gammab = 1;
@@ -1336,11 +1298,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     this->num_strips = num_strips;
     // this->dmaBufferCount = dmaBufferCount;//this doesn't make sense as it is no parameter
 
-// IDF5.5: 🌙 initled: call setGlobalNumStrips and setShowDelay
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     setGlobalNumStrips();
     setShowDelay();
-#endif
 
     ESP_LOGV(TAG, "xdelay:%d", __delay);
 #if HARDWARESPRITES == 1
@@ -1397,13 +1356,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     initDMABuffers();
   }
 
-// IDF5.5: 🌙 update and delete
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  // 🌙 update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
+  // update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
   void updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, uint8_t p_w2 = UINT8_MAX);
-  // 🌙 delete driver when the driver is stopped
+  // delete driver when the driver is stopped
   void deleteDriver();
-#endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
   typedef dma_descriptor_t I2SClocklessLedDriverDMABuffer;
@@ -1414,12 +1370,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   I2SClocklessLedDriverDMABuffer** DMABuffersTransposed = NULL;
   // buffer array for the regular way
 
-  // IDF5.5: 🌙 initled: DMABuffersTampon dynamically allocated to allow to delete and reallocate with different __NB_DMA_BUFFER value and free memory if needed
-  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
   I2SClocklessLedDriverDMABuffer** DMABuffersTampon = NULL;
-  #else
-  I2SClocklessLedDriverDMABuffer* DMABuffersTampon[__NB_DMA_BUFFER + 2];
-  #endif
 
   I2SClocklessLedDriverDMABuffer* allocateDMABuffer(int bytes) {
     I2SClocklessLedDriverDMABuffer* b = (I2SClocklessLedDriverDMABuffer*)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
@@ -1738,10 +1689,6 @@ static void IRAM_ATTR transpose16x1_noinline2(unsigned char* A, uint16_t* B) {
 
   y = *(unsigned int*)(A);
 
-// IDF5.5: 🌙 transpose16x1_noinline2: use NUM_STRIPS global variable, else #define NUMSTRIPS
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  // 🌙 use NUM_STRIPS global variable
-
   if (NUM_STRIPS > 4) {
     x = *(unsigned int*)(A + 4);
 
@@ -1780,51 +1727,6 @@ static void IRAM_ATTR transpose16x1_noinline2(unsigned char* A, uint16_t* B) {
     t = (y1 ^ (y1 >> 14)) & CC;
     y1 = y1 ^ t ^ (t << 14);
   }
-#else
-    // use #define NUMSTRIPS
-
-  #if NUMSTRIPS > 4
-  x = *(unsigned int*)(A + 4);
-  #else
-  x = 0;
-  #endif
-
-  #if NUMSTRIPS > 8
-  y1 = *(unsigned int*)(A + 8);
-  #else
-  y1 = 0;
-  #endif
-  #if NUMSTRIPS > 12
-  x1 = *(unsigned int*)(A + 12);
-  #else
-  x1 = 0;
-  #endif
-
-    // pre-transform x
-  #if NUMSTRIPS > 4
-  t = (x ^ (x >> 7)) & AAA;
-  x = x ^ t ^ (t << 7);
-  t = (x ^ (x >> 14)) & CC;
-  x = x ^ t ^ (t << 14);
-  #endif
-  #if NUMSTRIPS > 12
-  t = (x1 ^ (x1 >> 7)) & AAA;
-  x1 = x1 ^ t ^ (t << 7);
-  t = (x1 ^ (x1 >> 14)) & CC;
-  x1 = x1 ^ t ^ (t << 14);
-  #endif
-  // pre-transform y
-  t = (y ^ (y >> 7)) & AAA;
-  y = y ^ t ^ (t << 7);
-  t = (y ^ (y >> 14)) & CC;
-  y = y ^ t ^ (t << 14);
-  #if NUMSTRIPS > 8
-  t = (y1 ^ (y1 >> 7)) & AAA;
-  y1 = y1 ^ t ^ (t << 7);
-  t = (y1 ^ (y1 >> 14)) & CC;
-  y1 = y1 ^ t ^ (t << 14);
-  #endif
-#endif
 
   // final transform
   t = (x & FF) | ((y >> 4) & FF2);
