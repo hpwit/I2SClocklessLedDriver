@@ -425,7 +425,7 @@ class I2SClocklessLedDriver {
 
   /** Sets global brightness (0–255) and recomputes gamma lookup tables. */
   void setBrightness(uint8_t brightness) {
-    brightness = brightness;
+    this->brightness = brightness;
     if (!redMap) redMap = (uint8_t*)malloc(256);
     if (!greenMap) greenMap = (uint8_t*)malloc(256);
     if (!blueMap) blueMap = (uint8_t*)malloc(256);
@@ -462,19 +462,19 @@ class I2SClocklessLedDriver {
 
   /** Sets per-channel gamma correction (applied on top of brightness). RGBW variant; gammaw2 defaults to gammaw1. */
   void setGamma(float gammar, float gammag, float gammab, float gammaw1, float gammaw2 = -1) {
-    gammar = gammar;
-    gammag = gammag;
-    gammab = gammab;
-    gammaw = gammaw1;
-    gammaw2 = (gammaw2 < 0) ? gammaw1 : gammaw2;
+    this->gammar = gammar;
+    this->gammag = gammag;
+    this->gammab = gammab;
+    this->gammaw = gammaw1;
+    this->gammaw2 = (gammaw2 < 0) ? gammaw1 : gammaw2;
     setBrightness(brightness);
   }
 
   /** Sets per-channel gamma correction for RGB strips. */
   void setGamma(float gammar, float gammag, float gammab) {
-    gammar = gammar;
-    gammag = gammag;
-    gammab = gammab;
+    this->gammar = gammar;
+    this->gammag = gammag;
+    this->gammab = gammab;
     setBrightness(brightness);
   }
 
@@ -965,12 +965,12 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
       /*
           Code to transform RBG into RGBW thanks to @Jonathanese https://github.com/Jonathanese/NodeMCUPoleDriver/blob/master/LED_Framework.cpp
       */
-      uint8_t w = MIN(red, green);
-      w = MIN(w, blue);
-      red = red - w;
-      green = green - w;
-      blue = blue - w;
-      setPixel(pos, red, green, blue, W);
+      uint8_t white = MIN(red, green);
+      white = MIN(white, blue);
+      red = red - white;
+      green = green - white;
+      blue = blue - white;
+      setPixel(pos, red, green, blue, white);
     }
   }
 
