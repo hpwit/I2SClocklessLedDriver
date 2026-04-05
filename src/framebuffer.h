@@ -46,6 +46,12 @@ class frameBuffer {
     }
   }
 
+  // Non-copyable, non-movable due to raw pointer ownership
+  frameBuffer(const frameBuffer&) = delete;
+  frameBuffer& operator=(const frameBuffer&) = delete;
+  frameBuffer(frameBuffer&&) = delete;
+  frameBuffer& operator=(frameBuffer&&) = delete;
+
   bool valid() { return frames[writingframe] != nullptr; }
   Pixel& operator[](int i) {
     if (!frames[writingframe]) return _offPixel;

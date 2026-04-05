@@ -76,7 +76,7 @@ All semaphore operations inside `i2sStop()` use `xSemaphoreGiveFromISR` + `portY
 
 ## Memory layout (`FULL_DMA_BUFFER`)
 
-```
+```text
 DMABuffersTransposed[0]          — preamble (all zeros)
 DMABuffersTransposed[1..N]       — one buffer per LED column (transposed)
 DMABuffersTransposed[N+1]        — postamble (4× longer for reset timing)

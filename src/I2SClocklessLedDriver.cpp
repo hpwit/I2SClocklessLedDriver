@@ -51,6 +51,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
       ESP_LOGE(TAG, "updateDriver: timeout waiting for DMA to idle, aborting reconfiguration");
       return;  // members unchanged — old DMA state remains consistent
     }
+    wasWaitingtofinish = false;
   }
 
   deleteDriver();  // uses old num_led_per_strip and __NB_DMA_BUFFER as loop bounds

@@ -68,13 +68,14 @@ class hardwareSprite {
 #endif
   }
   void setTransparentColor(CRGB color) {
+    if (leds == nullptr) return;
     for (int i = 0; i < SPRITE_WIDTH * SPRITE_HEIGHT; i++) {
       leds[i] = color;
       transparentColor = color;
     }
   }
   void reorder(int width, int height) {
-    if (displaySprite) {
+    if (displaySprite && leds != nullptr) {
       for (int i = 0; i < SPRITE_WIDTH; i++) {
         for (int j = 0; j < SPRITE_HEIGHT; j++) {
           if (leds[j * SPRITE_WIDTH + i] != transparentColor) {

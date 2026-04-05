@@ -316,17 +316,16 @@ class I2SClocklessLedDriver {
   volatile SemaphoreHandle_t I2SClocklessLedDriver_semSync = NULL;
   volatile SemaphoreHandle_t I2SClocklessLedDriver_semDisp = NULL;
   volatile SemaphoreHandle_t I2SClocklessLedDriver_waitDisp = NULL;
-  volatile int dmaBufferActive = 0;
+  volatile uint8_t dmaBufferActive = 0;
   volatile bool wait;
   displayMode __displayMode;
   displayMode __defaultdisplayMode;
-  volatile int ledToDisplay;
-  volatile int ledToDisplay_out;
+  volatile uint16_t ledToDisplay;
+  volatile uint16_t ledToDisplay_out;
   OffsetDisplay _offsetDisplay, _defaultOffsetDisplay;
   // volatile int oo=0;
   uint8_t *leds, *saveleds;
-  int startleds;
-  int linewidth;
+  uint16_t linewidth;
   // uint8_t dmaBufferCount = __NB_DMA_BUFFER;  // we use two buffers
   volatile bool transpose = false;
 
@@ -367,7 +366,6 @@ class I2SClocklessLedDriver {
   volatile bool __enableDriver = true;
   volatile bool framesync = false;
   volatile bool wasWaitingtofinish = false;
-  volatile int counti;
 
   I2SClocklessLedDriver() {};
 
@@ -423,7 +421,7 @@ class I2SClocklessLedDriver {
   // Corrected = 255 * (Image/255)^(1/2.2).
 
   /** Sets global brightness (0–255) and recomputes gamma lookup tables. */
-  void setBrightness(int brightness) {
+  void setBrightness(uint8_t brightness) {
     _brightness = brightness;
     if (!__red_map) __red_map = (uint8_t*)malloc(256);
     if (!__green_map) __green_map = (uint8_t*)malloc(256);
@@ -930,7 +928,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     setPixelinBuffer(pos, red, green, blue, W);
   }
 
-  void initled(uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) { initled(NULL, Pinsq, num_strips, num_led_per_strip); }
+  /** Initialises the driver without an external LED buffer (buffer managed externally or unused). */
+  void initled(uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip, colorarrangment cArr = ORDER_GRB) { initled(nullptr, Pinsq, num_strips, num_led_per_strip, cArr); }
   /**
    * Blocks until the next DMA frame boundary (FULL_DMA_BUFFER + LOOP mode only).
    * Use before writing to the DMA buffer to avoid tearing.
@@ -1141,30 +1140,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 #ifdef USE_PIXELSLIB
   void initled(Pixels pix, uint8_t* Pinsq) { initled((uint8_t*)pix.getPixels(), Pinsq, pix.getLengths(), pix.getNumStrip()); }
 #endif
-  // initled with default color arrangement GRB
-  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips) {
-    if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
-      ESP_LOGE(TAG, "initled: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
-      return;
-    }
-    total_leds = 0;
-    for (int i = 0; i < num_strips; i++) {
-      this->stripSize[i] = sizes[i];
-      total_leds += sizes[i];
-    }
-    uint16_t maximum = maxLength(sizes, num_strips);
-    // Serial.printf("maximum %d\n",maximum);
-    ESP_LOGV(TAG, "maximum leds %d", maximum);
-    nb_components = 3;
-    p_r = 1;
-    p_g = 0;
-    p_b = 2;
-    p_w = UINT8_MAX;
-    p_w2 = UINT8_MAX;
-    __initled(leds, Pinsq, num_strips, maximum);
-  }
-
-  // initled with custom color arrangement
+  // initled with explicit raw component layout (advanced use)
   void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w = UINT8_MAX, uint8_t p_w2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
     if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
@@ -1191,27 +1167,14 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   // ── Initialisation ──────────────────────────────────────────────────────────
 
   /**
-   * Initialises the driver.
-   * @param leds      Pointer to the LED byte buffer (3 or 4 bytes per pixel).
+   * Initialises the driver with variable-length strips.
+   * @param leds      Pointer to the LED byte buffer (3 or 4 bytes per pixel). May be nullptr.
    * @param Pinsq     Array of GPIO pin numbers, one per strip.
+   * @param sizes     Array of strip lengths (one entry per strip).
    * @param num_strips Number of parallel strips (max MAX_PINS).
-   * @param num_led_per_strip LEDs per strip (all strips equal length).
-   * @param cArr      Colour byte order (ORDER_GRB, ORDER_GRBW, …).
-   *
-   * For variable-length strips use the overload that takes a uint16_t* sizes array.
+   * @param cArr      Colour byte order; defaults to ORDER_GRB.
    */
-  void initled(uint8_t* leds, uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) {
-    if (Pinsq == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
-      ESP_LOGE(TAG, "initled: invalid args num_strips=%u Pinsq=%p", num_strips, (void*)Pinsq);
-      return;
-    }
-    for (int i = 0; i < num_strips; i++) {
-      this->stripSize[i] = num_led_per_strip;
-    }
-    initled(leds, Pinsq, this->stripSize, num_strips);
-  }
-
-  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, colorarrangment cArr) {
+  void initled(uint8_t* leds, uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, colorarrangment cArr = ORDER_GRB) {
     if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args num_strips=%u sizes=%p Pinsq=%p", num_strips, (void*)sizes, (void*)Pinsq);
       return;
@@ -1288,7 +1251,8 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     __initled(leds, Pinsq, num_strips, maximum);
   }
 
-  void initled(uint8_t* leds, uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip, colorarrangment cArr) {
+  /** Initialises the driver with uniform strip lengths; cArr defaults to ORDER_GRB. */
+  void initled(uint8_t* leds, uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip, colorarrangment cArr = ORDER_GRB) {
     for (int i = 0; i < num_strips; i++) {
       this->stripSize[i] = num_led_per_strip;
     }
@@ -1333,7 +1297,6 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     _gammag = 1;
     _gammaw = 1;
     _gammaw2 = 1;
-    startleds = 0;
     this->leds = leds;
     this->saveleds = leds;
     this->num_led_per_strip = num_led_per_strip;
@@ -1549,7 +1512,6 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   #elif CONFIG_IDF_TARGET_ESP32
     i2sReset();
     framesync = false;
-    counti = 0;
 
     (&I2S0)->lc_conf.val = I2S_OUT_DATA_BURST_EN | I2S_OUTDSCR_BURST_EN | I2S_OUT_DATA_BURST_EN;
 

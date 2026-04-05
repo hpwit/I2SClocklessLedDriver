@@ -263,7 +263,7 @@ class Pixels {
     }
   }
 
-  Pixels getStrip(int num_strip) { return getStrip(num_strip, leddirection::FORWARD); }
+  Pixels getStrip(uint8_t num_strip) { return getStrip(num_strip, leddirection::FORWARD); }
 
   uint16_t* getLengths() { return _sizes; }
 
