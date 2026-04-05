@@ -16,10 +16,10 @@
 uint8_t leds[NUMSTRIPS * NUM_LEDS_PER_STRIP * 3];
 
   #ifdef CONFIG_IDF_TARGET_ESP32S3
-// uint8_t pins[6] = {9, 10,12,8,18,17};
-uint8_t pins[6] = {16, 10, 12, 8, 18, 17};
+// uint8_t pins[NUMSTRIPS] = {9, 10,12,8,18,17};
+uint8_t pins[NUMSTRIPS] = {16, 10, 12, 8, 18, 17};
   #else
-uint8_t pins[6] = {2, 12, 13, 25, 33, 32};
+uint8_t pins[NUMSTRIPS] = {2, 12, 13, 25, 33, 32};
   #endif
 
 I2SClocklessLedDriver driver;
@@ -41,7 +41,7 @@ long time1, time2, time3;
 void loop() {
   time1 = ESP.getCycleCount();
 
-  uint8_t effect = 2;
+  uint8_t effect = (off / 500) % 3;
 
   switch (effect) {
   case 0:

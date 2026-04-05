@@ -36,7 +36,7 @@ struct Pixel {
     blue = blue - white;
   }
 
-  inline Pixel() __attribute__((always_inline)) {}
+  inline Pixel() __attribute__((always_inline)) : red(0), green(0), blue(0), white(0) {}
 
   #ifdef USE_FASTLED
   inline Pixel& operator=(const CRGB& rhs) __attribute__((always_inline)) {
@@ -84,7 +84,7 @@ struct Pixel {
     // brigthness =0xE0 |(br&31);
   }
 
-  inline Pixel() __attribute__((always_inline)) {}
+  inline Pixel() __attribute__((always_inline)) : red(0), green(0), blue(0) {}
 
   #ifdef USE_FASTLED
   inline Pixel& operator=(const CRGB& rhs) __attribute__((always_inline)) {
@@ -125,6 +125,7 @@ class Pixels {
     }
     ledpointer = rhs.ledpointer;
     mapFunction = rhs.mapFunction;
+    arguments = rhs.arguments;
 
     // parent=rhs.parent;
   }
@@ -140,20 +141,21 @@ class Pixels {
     //  pib->nb_child=0;
   }
 
-  Pixels(int num_led_per_strip, int num_strips) {
-    int sizes[16];
+  Pixels(uint16_t num_led_per_strip, uint8_t num_strips) {
+    if (num_strips > 16) num_strips = 16;
+    uint16_t sizes[16];
     for (int i = 0; i < num_strips; i++) {
       sizes[i] = num_led_per_strip;
     }
     __Pixels(sizes, num_strips, leddirection::FORWARD, this);
   }
 
-  Pixels(int* sizes, int num_strips) { __Pixels(sizes, num_strips, leddirection::FORWARD, this); }
+  Pixels(uint16_t* sizes, uint8_t num_strips) { __Pixels(sizes, num_strips, leddirection::FORWARD, this); }
 
   bool localLedPointer = false;
 
-  Pixels(int* sizes, int num_strips, leddirection direction) { __Pixels(sizes, num_strips, direction, this); }
-  void __Pixels(int* sizes, int num_strips, leddirection direction, Pixels* pib) {
+  Pixels(uint16_t* sizes, uint8_t num_strips, leddirection direction) { __Pixels(sizes, num_strips, direction, this); }
+  void __Pixels(uint16_t* sizes, uint8_t num_strips, leddirection direction, Pixels* pib) {
     if (num_strips > 16) num_strips = 16;  // Clamp to array size
     int size = 0;
     for (int i = 0; i < num_strips; i++) {
@@ -231,8 +233,8 @@ class Pixels {
     }
   }
 
-  Pixels getStrip(int num_strip, leddirection direction) {
-    if (_num_strips == 0 or _num_strips < num_strip) {
+  Pixels getStrip(uint8_t num_strip, leddirection direction) {
+    if (_num_strips == 0 || num_strip < 0 || num_strip >= _num_strips) {
       // Return empty Pixels object
       Pixels empty;
       empty._size = 0;
@@ -242,7 +244,7 @@ class Pixels {
       return empty;
     } else {
       uint32_t off = 0;
-      for (int i = 0; i < num_strip % _num_strips; i++) {
+      for (int i = 0; i < num_strip; i++) {
         off += _sizes[i];
       }
 
@@ -252,9 +254,9 @@ class Pixels {
 
   Pixels getStrip(int num_strip) { return getStrip(num_strip, leddirection::FORWARD); }
 
-  int* getLengths() { return _sizes; }
+  uint16_t* getLengths() { return _sizes; }
 
-  int getNumStrip() { return _num_strips; }
+  uint8_t getNumStrip() { return _num_strips; }
   uint8_t* getPixels() { return (uint8_t*)ledpointer; }
   void clear() { memset(ledpointer, 0, _size * sizeof(Pixel)); }
 
@@ -262,11 +264,13 @@ class Pixels {
 
   Pixels createSubset(int start, leddirection direction) {
     if (start < 0) start = 0;
+    if (start > _size) start = _size;
     return Pixels(_size - start, ledpointer + start, direction);
   }
 
   Pixels createSubset(int start, int length, leddirection direction) {
     if (start < 0) start = 0;
+    if (start > _size) start = _size;
     if (length <= 0) length = 1;
     return Pixels(length, ledpointer + start, direction);
   }
@@ -292,8 +296,8 @@ class Pixels {
  private:
   Pixel* ledpointer = nullptr;
   size_t _size = 0;
-  int _sizes[16];
-  int _num_strips = 0;
+  uint16_t _sizes[16];
+  uint8_t _num_strips = 0;
   leddirection _direction = leddirection::FORWARD;;
   // int nb_child;
   //  Pixels *parent;

@@ -1,5 +1,7 @@
 #include "FastLED.h"
 
+#include <cstdint>
+
 #ifndef NBSPRITE
   #define NBSPRITE 8
 #endif
@@ -13,9 +15,9 @@
   #define nb_componentss 3
 #endif
 
-static int _spritenumber;
-static uint16_t* target;  // to be sized in the main
-static uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_componentss];
+extern int _spritenumber;
+extern uint16_t* target;  // to be sized in the main
+extern uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_componentss];
 
 class hardwareSprite {
  public:
@@ -76,4 +78,4 @@ class hardwareSprite {
   CRGB* leds;
 };
 
-static hardwareSprite sprites[NBSPRITE];
+extern hardwareSprite sprites[NBSPRITE];
