@@ -6,9 +6,9 @@
 |------|---------|
 | `src/I2SClocklessLedDriver.h` | Full driver class + all static ISR/transpose functions |
 | `src/I2SClocklessLedDriver.cpp` | Global variable definitions; `updateDriver()` / `deleteDriver()` |
-| `src/___pixeltypes.h` | `Pixel` struct and `Pixels` container (used when `USE_PIXELSLIB` is not set) |
+| `src/pixeltypes.h` | `Pixel` struct and `Pixels` container (used when `USE_PIXELSLIB` is not set) |
 | `src/framebuffer.h` | Simple double-buffer helper |
-| `src/hardwareSprite.h/.cpp` | Hardware sprite overlay (opt-in with `HARDWARESPRITES 1`) |
+| `src/HardwareSprite.h/.cpp` | Hardware sprite overlay (opt-in with `HARDWARESPRITES 1`) |
 | `src/helper.h` | Timing macros (`HOW_LONG`, `RUN_SKETCH_FOR`, `RUN_SKETCH_N_TIMES`) |
 | `src/main.cpp` | Development sketch — excluded from library builds via `library.json` |
 

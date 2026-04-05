@@ -1,7 +1,7 @@
 
 #pragma once
-#ifndef __HELPER__
-  #define __HELPER__
+#ifndef HELPER_H
+  #define HELPER_H
   #define HOW_LONG(name, func)                                                                                                 \
     {                                                                                                                          \
       uint32_t _time1_ = ESP.getCycleCount();                                                                                  \

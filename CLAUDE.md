@@ -36,7 +36,7 @@ There are no automated tests; validation is done by flashing and observing LED o
 | `src/hardwareSprite.h/.cpp` | Optional hardware sprite overlay (enabled with `#define HARDWARESPRITES 1`). |
 | `src/framebuffer.h` | Simple double-buffer helper (`frameBuffer` class). |
 | `src/helper.h` | Timing macros: `HOW_LONG`, `RUN_SKETCH_FOR`, `RUN_SKETCH_N_TIMES`. |
-| `src/___pixeltypes.h` | Minimal `Pixel`/`Pixels` types used when `USE_PIXELSLIB` is not defined. |
+| `src/pixeltypes.h` | Minimal `Pixel`/`Pixels` types used when `USE_PIXELSLIB` is not defined. |
 | `src/main.cpp` | Dev/test sketch (excluded from library build via `library.json`). Guarded by `#ifdef PLATFORM_VERSION`. |
 
 ## Key architecture
@@ -78,7 +78,7 @@ The ISR (`i2sStop`, `_I2SClocklessLedDriverinterruptHandler`) is `IRAM_ATTR` and
 |--------|--------|
 | `FULL_DMA_BUFFER` | Enable full pre-transposed DMA buffer |
 | `ENABLE_HARDWARE_SCROLL` | Enable `OffsetDisplay` hardware scrolling |
-| `USE_PIXELSLIB` | Use external PixelsLib types instead of built-in `___pixeltypes.h` |
+| `USE_PIXELSLIB` | Use external PixelsLib types instead of built-in `pixeltypes.h` |
 | `HARDWARESPRITES 1` | Enable hardware sprite overlay |
 | `SNAKEPATTERN` | 0/1 — strip layout (default 1) |
 | `ALTERNATEPATTERN` | 0/1 — alternate start sides (default 1) |

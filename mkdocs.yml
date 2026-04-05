@@ -32,6 +32,7 @@ nav:
       - Getting Started: enduser/enduser.md
   - Developer Guide:
       - Architecture & Internals: developer/developer.md
+      - Standards & Guidelines: developer/standardsandguidelines.md
 
 markdown_extensions:
   - admonition

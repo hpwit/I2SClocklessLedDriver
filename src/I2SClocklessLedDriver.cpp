@@ -11,14 +11,14 @@
 
 #include "I2SClocklessLedDriver.h"
 
-uint8_t __NB_DMA_BUFFER = 6;
-uint8_t NUM_STRIPS = 16;
+uint8_t gNbDmaBuffer = 6;
+uint8_t gNumStrips = 16;
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-clock_speed clock_1123KHZ = {4, 20, 9};
-clock_speed clock_1111KHZ = {4, 2, 1};
-clock_speed clock_1000KHZ = {5, 1, 0};
-clock_speed clock_800KHZ = {6, 4, 1};
+clock_speed clock1123Khz = {4, 20, 9};
+clock_speed clock1111Khz = {4, 2, 1};
+clock_speed clock1000Khz = {5, 1, 0};
+clock_speed clock800Khz = {6, 4, 1};
 #endif
 
 /**
@@ -27,98 +27,98 @@ clock_speed clock_800KHZ = {6, 4, 1};
  * to complete before freeing and reallocating buffers.  Leaves the object
  * unchanged if arguments are invalid or if the wait times out.
  */
-void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w, uint8_t p_w2) {
-  if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS || dmaBuffer == 0) {
-    ESP_LOGE(TAG, "updateDriver: invalid args num_strips=%u dmaBuffer=%u sizes=%p Pinsq=%p", num_strips, dmaBuffer, (void*)sizes, (void*)Pinsq);
+void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t nbComponents, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2) {
+  if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS || dmaBuffer == 0) {
+    ESP_LOGE(TAG, "updateDriver: invalid args numStrips=%u dmaBuffer=%u sizes=%p pinsq=%p", numStrips, dmaBuffer, (void*)sizes, (void*)pinsq);
     return;
   }
 
   // Compute new geometry locally so deleteDriver() still sees the old
-  // this->num_led_per_strip (used as a loop bound for FULL_DMA_BUFFER frees).
-  uint16_t new_num_led_per_strip = maxLength(sizes, num_strips);
+  // this->numLedPerStrip (used as a loop bound for FULL_DMA_BUFFER frees).
+  uint16_t newNumLedPerStrip = maxLength(sizes, numStrips);
 
   // Wait for any in-progress DMA transfer to complete before freeing buffers.
   // Do this before mutating any members so a timeout leaves the object consistent.
   if (isDisplaying) {
     wasWaitingtofinish = true;
-    if (I2SClocklessLedDriver_waitDisp == NULL) I2SClocklessLedDriver_waitDisp = xSemaphoreCreateCounting(10, 0);
-    if (I2SClocklessLedDriver_waitDisp == NULL) {
+    if (waitDisp == NULL) waitDisp = xSemaphoreCreateCounting(10, 0);
+    if (waitDisp == NULL) {
       wasWaitingtofinish = false;
       ESP_LOGE(TAG, "updateDriver: failed to create waitDisp semaphore, aborting");
       return;
     }
-    if (xSemaphoreTake(I2SClocklessLedDriver_waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
+    if (xSemaphoreTake(waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
       ESP_LOGE(TAG, "updateDriver: timeout waiting for DMA to idle, aborting reconfiguration");
       return;  // members unchanged — old DMA state remains consistent
     }
     wasWaitingtofinish = false;
   }
 
-  deleteDriver();  // uses old num_led_per_strip and __NB_DMA_BUFFER as loop bounds
+  deleteDriver();  // uses old numLedPerStrip and gNbDmaBuffer as loop bounds
 
   // Now safe to apply all new geometry and configuration.
-  this->num_strips = num_strips;
-  total_leds = 0;
-  for (int i = 0; i < num_strips; i++) {
+  this->numStrips = numStrips;
+  totalLeds = 0;
+  for (int i = 0; i < numStrips; i++) {
     stripSize[i] = sizes[i];
-    total_leds += sizes[i];
+    totalLeds += sizes[i];
   }
-  this->num_led_per_strip = new_num_led_per_strip;
-  _offsetDisplay.offsetx = 0;
-  _offsetDisplay.offsety = 0;
-  _offsetDisplay.panel_width = new_num_led_per_strip;
-  _offsetDisplay.panel_height = 9999;
-  _defaultOffsetDisplay = _offsetDisplay;
-  linewidth = new_num_led_per_strip;
+  this->numLedPerStrip = newNumLedPerStrip;
+  offsetDisplay.offsetx = 0;
+  offsetDisplay.offsety = 0;
+  offsetDisplay.panelWidth = newNumLedPerStrip;
+  offsetDisplay.panelHeight = 9999;
+  defaultOffsetDisplay = offsetDisplay;
+  linewidth = newNumLedPerStrip;
 
   setShowDelay();
   setGlobalNumStrips();
-  setPins(Pinsq);
+  setPins(pinsq);
 
-  __NB_DMA_BUFFER = dmaBuffer;
+  gNbDmaBuffer = dmaBuffer;
 
-  this->nb_components = nb_components;
-  this->p_r = p_r;
-  this->p_g = p_g;
-  this->p_b = p_b;
-  this->p_w = p_w;
-  this->p_w2 = p_w2;
+  this->nbComponents = nbComponents;
+  this->pR = pR;
+  this->pG = pG;
+  this->pB = pB;
+  this->pW = pW;
+  this->pW2 = pW2;
 
-  initDMABuffers();  // needs nb_components and num_led_per_strip for buffer sizing
+  initDMABuffers();  // needs nbComponents and numLedPerStrip for buffer sizing
 
-  setBrightness(_brightness);  // allocate/free gamma maps based on new p_w
+  setBrightness(brightness);  // allocate/free gamma maps based on new pW
 
-  ESP_LOGD(TAG, "updateLeds %d x %d (%d)", num_strips, num_led_per_strip, __NB_DMA_BUFFER);
+  ESP_LOGD(TAG, "updateLeds %d x %d (%d)", numStrips, numLedPerStrip, gNbDmaBuffer);
 }
 
 /** deleteDriver — frees all DMA buffers and the waitDisp semaphore.  Safe to call
  *  multiple times (all pointers are nulled after free). */
 void I2SClocklessLedDriver::deleteDriver() {
   #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 for PhysicalDriver not supported yet
-  if (DMABuffersTampon) {
-    for (int i = 0; i < __NB_DMA_BUFFER + 2; i++) {
-      if (DMABuffersTampon[i]) {
-        if (DMABuffersTampon[i]->buffer) heap_caps_free(DMABuffersTampon[i]->buffer);
-        heap_caps_free(DMABuffersTampon[i]);
-        DMABuffersTampon[i] = nullptr;
+  if (dmaBuffersTampon) {
+    for (int i = 0; i < gNbDmaBuffer + 2; i++) {
+      if (dmaBuffersTampon[i]) {
+        if (dmaBuffersTampon[i]->buffer) heap_caps_free(dmaBuffersTampon[i]->buffer);
+        heap_caps_free(dmaBuffersTampon[i]);
+        dmaBuffersTampon[i] = nullptr;
       }
     }
-    heap_caps_free(DMABuffersTampon);
-    DMABuffersTampon = nullptr;
+    heap_caps_free(static_cast<void*>(dmaBuffersTampon));
+    dmaBuffersTampon = nullptr;
   }
   #endif
 
   #ifdef FULL_DMA_BUFFER
-  if (DMABuffersTransposed) {
-    for (int i = 0; i < num_led_per_strip + 2; i++) {
-      if (DMABuffersTransposed[i]) {
-        if (DMABuffersTransposed[i]->buffer) heap_caps_free(DMABuffersTransposed[i]->buffer);
-        heap_caps_free(DMABuffersTransposed[i]);
-        DMABuffersTransposed[i] = nullptr;
+  if (dmaBuffersTransposed) {
+    for (int i = 0; i < numLedPerStrip + 2; i++) {
+      if (dmaBuffersTransposed[i]) {
+        if (dmaBuffersTransposed[i]->buffer) heap_caps_free(dmaBuffersTransposed[i]->buffer);
+        heap_caps_free(dmaBuffersTransposed[i]);
+        dmaBuffersTransposed[i] = nullptr;
       }
     }
-    free(DMABuffersTransposed);
-    DMABuffersTransposed = nullptr;
+    free(dmaBuffersTransposed);
+    dmaBuffersTransposed = nullptr;
   }
   #endif
 
@@ -131,15 +131,15 @@ void I2SClocklessLedDriver::deleteDriver() {
 
   #ifdef __HARDWARE_MAP
     #ifndef __NON_HEAP
-  if (_hmap) {
-    free(_hmap);
-    _hmap = nullptr;
+  if (hmap) {
+    free(hmap);
+    hmap = nullptr;
   }
     #endif
   #endif
 
-  if (I2SClocklessLedDriver_waitDisp) {
-    vSemaphoreDelete(I2SClocklessLedDriver_waitDisp);
-    I2SClocklessLedDriver_waitDisp = NULL;
+  if (waitDisp) {
+    vSemaphoreDelete(waitDisp);
+    waitDisp = NULL;
   }
 }

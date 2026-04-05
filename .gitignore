@@ -3,4 +3,7 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
+.cache
 .DS_Store
+compile_commands.json
+.lint_db/

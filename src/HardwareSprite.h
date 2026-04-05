@@ -11,37 +11,37 @@
 #ifndef SPRITE_HEIGHT
   #define SPRITE_HEIGHT 20
 #endif
-#ifndef nb_componentss
-  #define nb_componentss 3
+#ifndef NB_COMPONENTSS
+  #define NB_COMPONENTSS 3
 #endif
 
-extern int _spritenumber;
+extern int spriteCount;
 extern uint16_t* target;  // to be sized in the main
-extern uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_componentss];
+extern uint8_t spriteLeds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * NB_COMPONENTSS];
 
 /**
- * hardwareSprite — a fixed-size sprite that composites into the driver's
+ * HardwareSprite — a fixed-size sprite that composites into the driver's
  * transposed DMA buffer via reorder().
  *
- * Each instance occupies a slice of the global _spritesleds[] array.
+ * Each instance occupies a slice of the global spriteLeds[] array.
  * At most NBSPRITE instances may be constructed; the constructor silently
  * sets leds = nullptr if that limit is exceeded.
  * Set displaySprite = true and call reorder(panelWidth, panelHeight) each
  * frame to blend the sprite into the target buffer.
  */
-class hardwareSprite {
+class HardwareSprite {
  public:
-  hardwareSprite() {
-    if (_spritenumber >= NBSPRITE) {
+  HardwareSprite() noexcept {
+    if (spriteCount >= NBSPRITE) {
       displaySprite = false;
       leds = nullptr;
       spritenumber = -1;
       return;
     }
     displaySprite = false;
-    leds = (CRGB*)&_spritesleds[_spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT * nb_componentss];
-    spritenumber = _spritenumber;
-    _spritenumber++;
+    leds = reinterpret_cast<CRGB*>(&spriteLeds[spriteCount * SPRITE_WIDTH * SPRITE_HEIGHT * NB_COMPONENTSS]);
+    spritenumber = spriteCount;
+    spriteCount++;
   };
   bool displaySprite;
   int spritenumber;
@@ -69,9 +69,9 @@ class hardwareSprite {
   }
   void setTransparentColor(CRGB color) {
     if (leds == nullptr) return;
+    transparentColor = color;
     for (int i = 0; i < SPRITE_WIDTH * SPRITE_HEIGHT; i++) {
       leds[i] = color;
-      transparentColor = color;
     }
   }
   void reorder(int width, int height) {
@@ -79,8 +79,8 @@ class hardwareSprite {
       for (int i = 0; i < SPRITE_WIDTH; i++) {
         for (int j = 0; j < SPRITE_HEIGHT; j++) {
           if (leds[j * SPRITE_WIDTH + i] != transparentColor) {
-            int _offset = offset(i, j, width, height);
-            if (_offset >= 0 && _offset < width * height) target[_offset] = (uint16_t)(((j * SPRITE_WIDTH + i) + spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT) * nb_componentss + 1);  // if 0 then no print
+            int pixelOffset = offset(i, j, width, height);
+            if (pixelOffset >= 0 && pixelOffset < width * height) target[pixelOffset] = (uint16_t)(((j * SPRITE_WIDTH + i) + spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT) * NB_COMPONENTSS + 1);  // if 0 then no print
             // else
             //   Serial.printf("%d %d out\n",i,j);
             // lednumber[j * WIDTH + i] = offset(i, j, width, height);
@@ -95,4 +95,4 @@ class hardwareSprite {
   CRGB* leds;
 };
 
-extern hardwareSprite sprites[NBSPRITE];
+extern HardwareSprite sprites[NBSPRITE];
