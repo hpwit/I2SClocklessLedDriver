@@ -10,6 +10,9 @@ class frameBuffer {
   frameBuffer(int num_led) {
     writingframe = 0;
     displayframe = 0;
+    for (int i = 0; i < _NB_FRAME; i++) {
+      frames[i] = nullptr;
+    }
     /*
      * we create the frames
      * to add the logic if the memory is not enough
@@ -28,6 +31,13 @@ class frameBuffer {
     }
   }
 
+  ~frameBuffer() {
+    for (int i = 0; i < _NB_FRAME; i++) {
+      free(frames[i]);
+      frames[i] = nullptr;
+    }
+  }
+
   bool valid() { return frames[writingframe] != nullptr; }
   Pixel& operator[](int i) {
     if (!frames[writingframe]) return _offPixel;
@@ -43,6 +53,7 @@ class frameBuffer {
     writingframe = (writingframe + 1) % _NB_FRAME;
     // displayframe=
   }
+
  private:
-  Pixel _offPixel;
+  Pixel _offPixel{};
 };

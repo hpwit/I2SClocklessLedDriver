@@ -152,8 +152,6 @@ class Pixels {
 
   Pixels(uint16_t* sizes, uint8_t num_strips) { __Pixels(sizes, num_strips, leddirection::FORWARD, this); }
 
-  bool localLedPointer = false;
-
   Pixels(uint16_t* sizes, uint8_t num_strips, leddirection direction) { __Pixels(sizes, num_strips, direction, this); }
   void __Pixels(uint16_t* sizes, uint8_t num_strips, leddirection direction, Pixels* pib) {
     if (num_strips > 16) num_strips = 16;  // Clamp to array size
@@ -176,9 +174,7 @@ class Pixels {
   }
 
   ~Pixels() {
-    // Only free if we allocated (when _num_strips > 0 indicates we used the array constructor)
-    // Note: Need a flag to track ownership since some constructors take external pointers
-    if (arguments != nullptr) {
+    if (localArguments && arguments != nullptr) {
       free(arguments);
       arguments = nullptr;
     }
@@ -189,6 +185,7 @@ class Pixels {
   }
 
   Pixel& operator[](int i) {
+    if (_size == 0 || ledpointer == nullptr) return offPixel;
     switch (_direction) {
     case (leddirection::FORWARD):
 
@@ -234,7 +231,7 @@ class Pixels {
   }
 
   Pixels getStrip(uint8_t num_strip, leddirection direction) {
-    if (_num_strips == 0 || num_strip < 0 || num_strip >= _num_strips) {
+    if (_num_strips == 0 || num_strip >= _num_strips) {
       // Return empty Pixels object
       Pixels empty;
       empty._size = 0;
@@ -272,7 +269,8 @@ class Pixels {
     if (start < 0) start = 0;
     if (start > _size) start = _size;
     int remaining = _size - start;
-    if (length <= 0) length = 1;
+    if (remaining == 0) return Pixels(0, ledpointer + start, direction);
+    if (length <= 0) length = remaining;  // Default to all remaining     
     if (length > remaining) length = remaining;
 
     return Pixels(length, ledpointer + start, direction);
@@ -291,21 +289,25 @@ class Pixels {
       */
   inline void setMapFunction(int (*fptr)(int i, void* args), void* args, int size) {
     mapFunction = fptr;
-    if (arguments != NULL) free(arguments);
+    if (localArguments && arguments != NULL) free(arguments);
     arguments = (void*)malloc(size);
     if (arguments == NULL) {
       mapFunction = nullptr;  // Can't use mapping without arguments
+      localArguments = false;
       return;
     }
     memcpy(arguments, args, size);
+    localArguments = true;
   }
 
  private:
+  bool localLedPointer = false;
+  bool localArguments = false;
   Pixel* ledpointer = nullptr;
   size_t _size = 0;
   uint16_t _sizes[16];
   uint8_t _num_strips = 0;
-  leddirection _direction = leddirection::FORWARD;;
+  leddirection _direction = leddirection::FORWARD;
   // int nb_child;
   //  Pixels *parent;
   void* arguments = nullptr;

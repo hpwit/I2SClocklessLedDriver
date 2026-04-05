@@ -35,8 +35,8 @@ void setup() {
   driver.setBrightness(10);
 }
 
-int off = 0;
-long time1, time2, time3;
+uint32_t off = 0;
+uint32_t time1, time2, time3;
 
 void loop() {
   time1 = ESP.getCycleCount();
@@ -51,12 +51,12 @@ void loop() {
     break;
   case 1:
     // random effect
-    for (int i = 0; i < NUM_LEDS_PER_STRIP * NUMSTRIPS * 3; i++) leds[i] = 0;  // fadetoblack 70%
+    memset(leds, 0, sizeof(leds));  // black
     driver.setPixel(random(NUM_LEDS_PER_STRIP * NUMSTRIPS), 255, random(255), 0);
     break;
   case 2:
     // lines
-    for (int i = 0; i < NUM_LEDS_PER_STRIP * NUMSTRIPS * 3; i++) leds[i] = 0;  // black
+    memset(leds, 0, sizeof(leds));  // black
     uint16_t time = 200;                                                       // ms
     uint8_t row = (millis() / time) % NUMSTRIPS;
     for (uint16_t col = 0; col < NUM_LEDS_PER_STRIP; col++) driver.setPixel(row * NUM_LEDS_PER_STRIP + ((row % 2 == 0) ? col : (NUM_LEDS_PER_STRIP - 1 - col)), 255, 0, 0);
@@ -73,7 +73,16 @@ void loop() {
   loopWiFi(time1, time2, time3);
   #endif
 
-  if (off % 100 == 0) Serial.printf("Calcul pixel fps:%.2f   showPixels fps:%.2f   Total fps:%.2f \n", (float)240000000 / (time2 - time1), (float)240000000 / (time3 - time2), (float)240000000 / (time3 - time1));
+  if (off % 100 == 0) {
+    const float cpu_hz = ESP.getCpuFreqMHz() * 1000000.0f;
+    const uint32_t calc_cycles = time2 - time1;
+    const uint32_t show_cycles = time3 - time2;
+    const uint32_t total_cycles = time3 - time1;
+    if (calc_cycles && show_cycles && total_cycles) {
+      Serial.printf("Calcul pixel fps:%.2f   showPixels fps:%.2f   Total fps:%.2f \n",
+                    cpu_hz / calc_cycles, cpu_hz / show_cycles, cpu_hz / total_cycles);
+    }
+  }
   off++;
 }
 #endif
