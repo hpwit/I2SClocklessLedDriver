@@ -271,7 +271,10 @@ class Pixels {
   Pixels createSubset(int start, int length, leddirection direction) {
     if (start < 0) start = 0;
     if (start > _size) start = _size;
+    int remaining = _size - start;
     if (length <= 0) length = 1;
+    if (length > remaining) length = remaining;
+
     return Pixels(length, ledpointer + start, direction);
   }
   /*

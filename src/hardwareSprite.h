@@ -22,6 +22,12 @@ extern uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_compone
 class hardwareSprite {
  public:
   hardwareSprite() {
+    if (_spritenumber >= NBSPRITE) {
+      displaySprite = false;
+      leds = nullptr;
+      spritenumber = -1;
+      return;
+    }
     displaySprite = false;
     leds = (CRGB*)&_spritesleds[_spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT * nb_componentss];
     spritenumber = _spritenumber;

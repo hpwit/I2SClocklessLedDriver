@@ -28,8 +28,13 @@ class frameBuffer {
     }
   }
 
-  Pixel& operator[](int i) { return *(frames[writingframe] + i); }
+  bool valid() { return frames[writingframe] != nullptr; }
+  Pixel& operator[](int i) {
+    if (!frames[writingframe]) return _offPixel;
+    return *(frames[writingframe] + i);
+  }
   uint8_t* getFrametoDisplay() {
+    if (!frames[writingframe]) return nullptr;
     uint8_t* tmp = (uint8_t*)frames[writingframe];
     switchFrame();
     return tmp;
@@ -38,4 +43,6 @@ class frameBuffer {
     writingframe = (writingframe + 1) % _NB_FRAME;
     // displayframe=
   }
+ private:
+  Pixel _offPixel;
 };

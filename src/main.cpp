@@ -58,8 +58,8 @@ void loop() {
     // lines
     for (int i = 0; i < NUM_LEDS_PER_STRIP * NUMSTRIPS * 3; i++) leds[i] = 0;  // black
     uint16_t time = 200;                                                       // ms
-    uint8_t row = (millis() / time) % 16;
-    for (uint8_t col = 0; col < 16; col++) driver.setPixel(row * 16 + ((row % 2 == 0) ? col : (15 - col)), 255, 0, 0);
+    uint8_t row = (millis() / time) % NUMSTRIPS;
+    for (uint16_t col = 0; col < NUM_LEDS_PER_STRIP; col++) driver.setPixel(row * NUM_LEDS_PER_STRIP + ((row % 2 == 0) ? col : (NUM_LEDS_PER_STRIP - 1 - col)), 255, 0, 0);
     break;
   }
 
