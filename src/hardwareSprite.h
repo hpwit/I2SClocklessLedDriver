@@ -19,6 +19,16 @@ extern int _spritenumber;
 extern uint16_t* target;  // to be sized in the main
 extern uint8_t _spritesleds[NBSPRITE * SPRITE_HEIGHT * SPRITE_WIDTH * nb_componentss];
 
+/**
+ * hardwareSprite — a fixed-size sprite that composites into the driver's
+ * transposed DMA buffer via reorder().
+ *
+ * Each instance occupies a slice of the global _spritesleds[] array.
+ * At most NBSPRITE instances may be constructed; the constructor silently
+ * sets leds = nullptr if that limit is exceeded.
+ * Set displaySprite = true and call reorder(panelWidth, panelHeight) each
+ * frame to blend the sprite into the target buffer.
+ */
 class hardwareSprite {
  public:
   hardwareSprite() {

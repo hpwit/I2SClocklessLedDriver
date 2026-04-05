@@ -273,6 +273,19 @@ struct LedTiming {
 extern uint8_t __NB_DMA_BUFFER;
 extern uint8_t NUM_STRIPS;
 
+/**
+ * I2SClocklessLedDriver — parallel LED strip driver for ESP32 / ESP32-S3.
+ *
+ * Drives up to 16 WS2812/WS2813/WS2815 (RGB) or SK6812 (RGBW) strips in
+ * parallel using the I2S peripheral + DMA.  The CPU is not involved during
+ * transmission; in FULL_DMA_BUFFER + LOOP mode the hardware runs entirely
+ * autonomously.
+ *
+ * Typical usage:
+ *   1. Call initled() once to configure pins, strip count, and colour order.
+ *   2. Fill the leds[] byte array (R,G,B per pixel, strips laid out sequentially).
+ *   3. Call showPixels() to push the frame.
+ */
 class I2SClocklessLedDriver {
 #ifdef CONFIG_IDF_TARGET_ESP32
   struct I2SClocklessLedDriverDMABuffer {
@@ -409,6 +422,7 @@ class I2SClocklessLedDriver {
 
   // Corrected = 255 * (Image/255)^(1/2.2).
 
+  /** Sets global brightness (0–255) and recomputes gamma lookup tables. */
   void setBrightness(int brightness) {
     _brightness = brightness;
     if (!__red_map) __red_map = (uint8_t*)malloc(256);
@@ -445,6 +459,7 @@ class I2SClocklessLedDriver {
     }
   }
 
+  /** Sets per-channel gamma correction (applied on top of brightness). RGBW variant; gammaw2 defaults to gammaw1. */
   void setGamma(float gammar, float gammag, float gammab, float gammaw1, float gammaw2 = -1) {
     _gammar = gammar;
     _gammag = gammag;
@@ -454,6 +469,7 @@ class I2SClocklessLedDriver {
     setBrightness(_brightness);
   }
 
+  /** Sets per-channel gamma correction for RGB strips. */
   void setGamma(float gammar, float gammag, float gammab) {
     _gammar = gammar;
     _gammag = gammag;
@@ -652,10 +668,17 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
 
 #ifdef FULL_DMA_BUFFER
 
+  /** Stops the LOOP display mode started by showPixelsFromBuffer(LOOP). */
   void stopDisplayLoop() { DMABuffersTransposed[num_led_per_strip + 1]->descriptor.qe.stqe_next = 0; }
 
+  /** Displays the pre-transposed DMA buffer without re-transposing the leds[] array. Non-blocking. */
   void showPixelsFromBuffer() { showPixelsFromBuffer(NO_WAIT); }
 
+  /**
+   * Displays the pre-transposed DMA buffer.
+   * dispmode == LOOP: the DMA descriptor ring loops forever (CPU-free); call stopDisplayLoop() to stop.
+   * dispmode == NO_WAIT / WAIT: single-shot.
+   */
   void showPixelsFromBuffer(displayMode dispmode) {
     /*
      We cannot launch twice when in loopmode
@@ -871,6 +894,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     }
   }
 
+  /** Writes one RGBW pixel directly into the pre-transposed DMA buffer (FULL_DMA_BUFFER only). */
   void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue, uint8_t white) {
     int stripNumber = -1;
     uint32_t total = 0;
@@ -892,6 +916,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     setPixelinBufferByStrip(stripNumber, posOnStrip, red, green, blue, white);
   }
 
+  /** Writes one RGB pixel directly into the pre-transposed DMA buffer; derives white channel for RGBW strips. */
   void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
     uint8_t W = 0;
     if (p_w != UINT8_MAX) {
@@ -906,6 +931,10 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
   }
 
   void initled(uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) { initled(NULL, Pinsq, num_strips, num_led_per_strip); }
+  /**
+   * Blocks until the next DMA frame boundary (FULL_DMA_BUFFER + LOOP mode only).
+   * Use before writing to the DMA buffer to avoid tearing.
+   */
   void waitSync() {
     I2SClocklessLedDriver_semSync = xSemaphoreCreateBinary();
     if (xSemaphoreTake(I2SClocklessLedDriver_semSync, pdMS_TO_TICKS(500)) == pdFALSE) {
@@ -914,6 +943,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     }
   }
 #endif
+  /** Sets one RGBW pixel in the leds[] byte buffer. */
   void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue, uint8_t white) {
     uint8_t* offset = leds + (pos << 2);  // faster than doing * 4
     *(offset) = red;
@@ -922,6 +952,7 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     *(++offset) = white;
   }
 
+  /** Sets one RGB pixel in the leds[] buffer; auto-derives white channel for RGBW strips. */
   void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
     if (p_w == UINT8_MAX) {  // no white channel
       uint8_t* offset = leds + (pos << 1) + pos;
@@ -956,6 +987,11 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     isDisplaying = true;
   }
 
+  // ── Display ─────────────────────────────────────────────────────────────────
+  // All showPixels() variants call waitDisplay() internally, so a pending
+  // NO_WAIT transfer is always drained before the next one starts.
+
+  /** Pushes the current frame; optional displayMode (WAIT/NO_WAIT), buffer swap, and hardware scroll offset. */
   void showPixels(displayMode dispmode, uint8_t* new_leds, OffsetDisplay offdisp) {
     waitDisplay();
     _offsetDisplay = offdisp;
@@ -1152,6 +1188,18 @@ putdefaultones((uint16_t *)DMABuffersTampon[1]->buffer);
     __initled(leds, Pinsq, num_strips, maximum);
   }
 
+  // ── Initialisation ──────────────────────────────────────────────────────────
+
+  /**
+   * Initialises the driver.
+   * @param leds      Pointer to the LED byte buffer (3 or 4 bytes per pixel).
+   * @param Pinsq     Array of GPIO pin numbers, one per strip.
+   * @param num_strips Number of parallel strips (max MAX_PINS).
+   * @param num_led_per_strip LEDs per strip (all strips equal length).
+   * @param cArr      Colour byte order (ORDER_GRB, ORDER_GRBW, …).
+   *
+   * For variable-length strips use the overload that takes a uint16_t* sizes array.
+   */
   void initled(uint8_t* leds, uint8_t* Pinsq, uint8_t num_strips, uint16_t num_led_per_strip) {
     if (Pinsq == nullptr || num_strips == 0 || num_strips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args num_strips=%u Pinsq=%p", num_strips, (void*)Pinsq);

@@ -21,7 +21,12 @@ clock_speed clock_1000KHZ = {5, 1, 0};
 clock_speed clock_800KHZ = {6, 4, 1};
 #endif
 
-// update driver: recreate dma buffers if num_strips or num_led_per_strip or dmaBuffer size changed
+/**
+ * updateDriver — reconfigures the driver at runtime (pin map, strip count/lengths,
+ * DMA buffer depth, colour order).  Safely waits for any in-flight DMA transfer
+ * to complete before freeing and reallocating buffers.  Leaves the object
+ * unchanged if arguments are invalid or if the wait times out.
+ */
 void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_t num_strips, uint8_t dmaBuffer, uint8_t nb_components, uint8_t p_r, uint8_t p_g, uint8_t p_b, uint8_t p_w, uint8_t p_w2) {
   if (Pinsq == nullptr || sizes == nullptr || num_strips == 0 || num_strips > MAX_PINS || dmaBuffer == 0) {
     ESP_LOGE(TAG, "updateDriver: invalid args num_strips=%u dmaBuffer=%u sizes=%p Pinsq=%p", num_strips, dmaBuffer, (void*)sizes, (void*)Pinsq);
@@ -85,7 +90,8 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* Pinsq, uint16_t* sizes, uint8_
   ESP_LOGD(TAG, "updateLeds %d x %d (%d)", num_strips, num_led_per_strip, __NB_DMA_BUFFER);
 }
 
-// 🌙 delete driver when the driver is stopped
+/** deleteDriver — frees all DMA buffers and the waitDisp semaphore.  Safe to call
+ *  multiple times (all pointers are nulled after free). */
 void I2SClocklessLedDriver::deleteDriver() {
   #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 for PhysicalDriver not supported yet
   if (DMABuffersTampon) {

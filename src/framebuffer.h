@@ -2,6 +2,14 @@
 // #include "_pixelslib.h"
 #define _NB_FRAME 2
 
+/**
+ * frameBuffer — a simple double-buffer wrapper over a Pixel array.
+ *
+ * operator[] writes into the current writing frame.
+ * getFrametoDisplay() returns a pointer to the writing frame and advances
+ * the write index, so the caller can hand the returned pointer to showPixels().
+ * Check valid() before use — construction fails silently if calloc returns NULL.
+ */
 class frameBuffer {
  public:
   Pixel* frames[_NB_FRAME];

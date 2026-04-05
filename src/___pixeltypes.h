@@ -13,6 +13,7 @@
 
 #ifdef COLOR_RGBW
 
+/** Single RGBW LED pixel. raw[] gives direct byte access; named fields (red/green/blue/white) give semantic access. */
 struct Pixel {
   union {
     uint8_t raw[4];
@@ -70,6 +71,7 @@ struct Pixel {
 };
 #else
 
+/** Single RGB LED pixel. raw[] gives direct byte access; named fields give semantic access. */
 struct Pixel {
   union {
     uint8_t raw[3];
@@ -113,6 +115,17 @@ struct Pixel {
 
 enum class leddirection { FORWARD, BACKWARD, MAP };
 
+/**
+ * Pixels — a view over a contiguous LED byte buffer, optionally spanning
+ * multiple strips.
+ *
+ * Ownership:
+ *   - Constructors that take a uint16_t* sizes array allocate their own buffer
+ *     (localLedPointer = true) and free it in the destructor.
+ *   - Constructors that take an external Pixel* pointer do NOT own the buffer.
+ *   - The copy constructor performs a shallow copy — the copy does not own the
+ *     buffer or the arguments block.
+ */
 class Pixels {
  public:
   inline Pixels() __attribute__((always_inline)) {}
@@ -124,8 +137,9 @@ class Pixels {
       _sizes[i] = rhs._sizes[i];
     }
     ledpointer = rhs.ledpointer;
-    mapFunction = rhs.mapFunction;
-    arguments = rhs.arguments;
+    mapFunction = nullptr;  // Don't copy mapping - caller must re-set if needed
+    arguments = nullptr;
+    // localArguments remains false (default)
 
     // parent=rhs.parent;
   }
