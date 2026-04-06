@@ -1,5 +1,19 @@
 # End User Guide
 
+## Migration / Breaking Changes
+
+If upgrading from an older release, the following types were renamed:
+
+| Old name | New name | Notes |
+|---|---|---|
+| `frameBuffer` | `FrameBuffer` | Also exposes a new `valid()` method (see below) |
+| `hardwareSprite` | `HardwareSprite` | |
+| `leddirection` | `LedDirection` | Now an `enum class`; use `LedDirection::FORWARD`, `LedDirection::BACKWARD`, etc. |
+| `colorarrangment` | `ColorArrangement` | Typo fix |
+| `displayMode` (enum) | `DisplayMode` | Member variable and enum values (`NO_WAIT`, `WAIT`, `LOOP`) unchanged |
+
+---
+
 ## Installation
 
 ### PlatformIO
@@ -218,13 +232,18 @@ driver.setPixelinBuffer(pos, r, g, b);
 
 ## Runtime Reconfiguration
 
-`updateDriver()` allows changing the number of strips, strip lengths, or DMA buffer count at runtime without rebooting. It safely waits for any in-flight DMA transfer to complete first.
+`updateDriver()` reconfigures the driver at runtime (pin map, strip count/lengths, DMA buffer depth, colour order) without rebooting. It safely quiesces any in-flight DMA transfer before applying changes.
+
+`deleteDriver()` releases all DMA buffers and is safe to call multiple times. Call it before destroying the driver object or before a deep sleep that releases peripherals.
 
 ```cpp
 uint8_t newPins[4] = {2, 4, 5, 12};
 uint16_t newSizes[4] = {100, 200, 150, 300};
 driver.updateDriver(newPins, newSizes, 4, /*dmaBuffer=*/6,
                     /*nb_components=*/3, /*p_r=*/1, /*p_g=*/0, /*p_b=*/2);
+
+// Release all DMA resources:
+driver.deleteDriver();
 ```
 
 ---
@@ -240,13 +259,39 @@ Requires `#define HARDWARESPRITES 1`.
 #define HARDWARESPRITES 1
 #include "I2SClocklessLedDriver.h"
 
-hardwareSprite sprite;
+HardwareSprite sprite;
 sprite.posX = 10;
 sprite.posY = 5;
 sprite.displaySprite = true;
 ```
 
 Each `hardwareSprite` writes into a pre-allocated segment of `_spritesleds[]`. A maximum of `NBSPRITE` sprites can be constructed.
+
+---
+
+## FrameBuffer
+
+`FrameBuffer` is a simple double-buffer helper. Always check `valid()` after construction — it returns `false` if the heap allocation failed:
+
+```cpp
+FrameBuffer fb(numStrips * numLedsPerStrip * 3);
+if (!fb.valid()) {
+    // allocation failed — do not use fb
+}
+```
+
+---
+
+## Pixels
+
+`Pixels` objects support copy-construction (creates a lightweight non-owning view of the source buffer) but **assignment is deleted** — `p = other;` is a compile error by design. Use copy-initialisation instead:
+
+```cpp
+Pixels view = original;  // OK — lightweight view
+// view = other;         // compile error
+```
+
+`getStrip(n)` returns an empty `Pixels` object (size 0, null pointer) if `n` is out of range, rather than crashing.
 
 ---
 

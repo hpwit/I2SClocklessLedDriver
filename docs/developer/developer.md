@@ -5,7 +5,7 @@
 | Path | Purpose |
 |------|---------|
 | `src/I2SClocklessLedDriver.h` | Full driver class + all static ISR/transpose functions |
-| `src/I2SClocklessLedDriver.cpp` | Global variable definitions; `updateDriver()` / `deleteDriver()` |
+| `src/I2SClocklessLedDriver.cpp` | `updateDriver()` / `deleteDriver()` implementations |
 | `src/pixeltypes.h` | `Pixel` struct and `Pixels` container (used when `USE_PIXELSLIB` is not set) |
 | `src/framebuffer.h` | Simple double-buffer helper |
 | `src/HardwareSprite.h/.cpp` | Hardware sprite overlay (opt-in with `HARDWARESPRITES 1`) |
@@ -117,11 +117,43 @@ pio device monitor                       # serial monitor
 
 ---
 
+## Design decisions and known issues
+
+### No more mutable globals (commit 54db938)
+
+`gNbDmaBuffer` and `gNumStrips` were file-scope globals. With two `I2SClocklessLedDriver` instances they would share state and cause a data race. They were removed as follows:
+
+- `gNbDmaBuffer` → class member `nbDmaBuffer` (default 6, not `volatile`). `volatile` is unnecessary because `updateDriver()` always waits for DMA to quiesce via semaphore before writing it; the ISR therefore never runs concurrently with a write.
+- `gNumStrips` → parameter on `transpose16x1Noinline2()`; the ISR passes `driver->numStrips` (already `volatile`) directly.
+
+### `Pixels` copy semantics — intentional asymmetry
+
+The copy constructor produces a *non-owning view*: it copies `ledpointer` and sizes but clears `localLedPointer`, `mapFunction`, and `arguments`. `operator=` is deleted to prevent silent shallow copies that could outlive the source buffer. Do not treat the missing assignment operator as a defect.
+
+### `HardwareSprite::reorder()` — caller precondition
+
+`target` carries no size metadata. The bounds check (`pixelOffset >= 0 && pixelOffset < width * height`) only validates within the declared dimensions; if the `target` allocation is actually smaller than `width * height`, writes will overflow silently. Adding a `targetSize` parameter would just shift the error surface without preventing it. Document and enforce as a caller precondition: *the `target` buffer must hold at least `width * height` `uint16_t` elements.*
+
+### `tools/patch_compile_db.py` — known issue with xtensa stubs
+
+The script currently copies xtensa base headers into the live PlatformIO package tree (`~/.platformio/packages/framework-arduinoespressif32-libs/…/xtensa/`). This corrupts subsequent `pio run` builds with `'xthal_set_intset' was not declared in this scope` errors.
+
+**Recovery:** `rm -rf ~/.platformio/packages/framework-arduinoespressif32-libs`
+
+**Pending fix:** write stubs to `OUTPUT_DIR/xtensa_stubs/` and inject via `-isystem` instead of mutating system packages.
+
+---
+
 ## CI
 
 Two GitHub Actions workflows are provided:
 
 - **`.github/workflows/build.yml`** — compiles all four PlatformIO environments on every push and pull request.
+- **`.github/workflows/lint.yml`** — runs `cppcheck` and `clang-tidy` on every push and pull request.
 - **`.github/workflows/docs.yml`** — builds and deploys this MkDocs site to GitHub Pages on every push to `main`.
 
 To enable GitHub Pages deployment, go to **Settings → Pages** and set the source to the `gh-pages` branch.
+
+### clang-tidy exit code handling
+
+`clang-tidy` always exits non-zero when cross-compilation headers (xtensa, newlib, RISC-V) cause fatal errors on the host toolchain. The lint workflow therefore captures output via command substitution with `|| true` and only fails if the captured output contains violation lines anchored to `$(pwd)/src/`. Do **not** remove `|| true` or add `set -e` around the clang-tidy step — that would turn every cross-compilation header error into a CI failure.
