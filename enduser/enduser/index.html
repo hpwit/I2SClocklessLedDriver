@@ -1,0 +1,1384 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="ESP32 I2S/DMA parallel LED strip driver for WS2812/SK6812">
+      
+      
+      
+        <link rel="canonical" href="https://hpwit.github.io/I2SClocklessLedDriver/enduser/enduser/">
+      
+      
+        <link rel="prev" href="../..">
+      
+      
+        <link rel="next" href="../../developer/developer/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Getting Started - I2SClocklessLedDriver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#end-user-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="I2SClocklessLedDriver" class="md-header__button md-logo" aria-label="I2SClocklessLedDriver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            I2SClocklessLedDriver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Getting Started
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/hpwit/I2SClocklessLedDriver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hpwit/I2SClocklessLedDriver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  End User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../developer/developer/" class="md-tabs__link">
+          
+  
+  
+  Developer Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="I2SClocklessLedDriver" class="md-nav__button md-logo" aria-label="I2SClocklessLedDriver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    I2SClocklessLedDriver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/hpwit/I2SClocklessLedDriver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hpwit/I2SClocklessLedDriver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    End User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    End User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#migration-breaking-changes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Migration / Breaking Changes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Installation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#platformio" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        PlatformIO
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#arduino-ide" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Arduino IDE
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#basic-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Basic Setup
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#initialisation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Initialisation
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Initialisation">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#uniform-strip-lengths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Uniform strip lengths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#variable-strip-lengths" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Variable strip lengths
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#color-orders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Color orders
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#setting-pixels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setting Pixels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Setting Pixels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#direct-buffer-write-fastest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct buffer write (fastest)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#helper-rgb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Helper — RGB
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#helper-rgbw-explicit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Helper — RGBW explicit
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#brightness-gamma" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Brightness &amp; Gamma
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#showing-pixels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Showing Pixels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Showing Pixels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#blocking-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Blocking (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#non-blocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Non-blocking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#with-a-hardware-scroll-offset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        With a hardware scroll offset
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#full-dma-buffer-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full DMA Buffer Mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Full DMA Buffer Mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transpose-then-display" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transpose then display
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#direct-dma-buffer-write" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Direct DMA buffer write
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#continuous-loop" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Continuous loop
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#frame-sync" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Frame sync
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#runtime-reconfiguration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Runtime Reconfiguration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#hardware-sprites" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Hardware Sprites
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#framebuffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        FrameBuffer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pixels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pixels
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#using-with-fastled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using with FastLED
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#compile-time-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Compile-time Options
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Developer Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/developer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../developer/standardsandguidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standards & Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="end-user-guide">End User Guide<a class="headerlink" href="#end-user-guide" title="Permanent link">&para;</a></h1>
+<h2 id="migration-breaking-changes">Migration / Breaking Changes<a class="headerlink" href="#migration-breaking-changes" title="Permanent link">&para;</a></h2>
+<p>If upgrading from an older release, the following types were renamed:</p>
+<table>
+<thead>
+<tr>
+<th>Old name</th>
+<th>New name</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>frameBuffer</code></td>
+<td><code>FrameBuffer</code></td>
+<td>Also exposes a new <code>valid()</code> method (see below)</td>
+</tr>
+<tr>
+<td><code>hardwareSprite</code></td>
+<td><code>HardwareSprite</code></td>
+<td></td>
+</tr>
+<tr>
+<td><code>leddirection</code></td>
+<td><code>LedDirection</code></td>
+<td>Now an <code>enum class</code>; use <code>LedDirection::FORWARD</code>, <code>LedDirection::BACKWARD</code>, etc.</td>
+</tr>
+<tr>
+<td><code>colorarrangment</code></td>
+<td><code>ColorArrangement</code></td>
+<td>Typo fix</td>
+</tr>
+<tr>
+<td><code>displayMode</code> (enum)</td>
+<td><code>DisplayMode</code></td>
+<td>Member variable and enum values (<code>NO_WAIT</code>, <code>WAIT</code>, <code>LOOP</code>) unchanged</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
+<h3 id="platformio">PlatformIO<a class="headerlink" href="#platformio" title="Permanent link">&para;</a></h3>
+<p>Add to your <code>platformio.ini</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="na">lib_deps</span><span class="w"> </span><span class="o">=</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="na">https</span><span class="o">:</span><span class="s">//github.com/hpwit/I2SClocklessLedDriver</span>
+</code></pre></div>
+<h3 id="arduino-ide">Arduino IDE<a class="headerlink" href="#arduino-ide" title="Permanent link">&para;</a></h3>
+<p>Download the repository as a ZIP and use <strong>Sketch → Include Library → Add .ZIP Library</strong>.</p>
+<hr />
+<h2 id="basic-setup">Basic Setup<a class="headerlink" href="#basic-setup" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="cp">#define NUMSTRIPS 8</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="cp">#define NUM_LEDS_PER_STRIP 144</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;I2SClocklessLedDriver.h&quot;</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">I2SClocklessLedDriver</span><span class="w"> </span><span class="n">driver</span><span class="p">;</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="kt">uint8_t</span><span class="w"> </span><span class="n">leds</span><span class="p">[</span><span class="n">NUMSTRIPS</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="p">];</span><span class="w">  </span><span class="c1">// 3 bytes per RGB pixel</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="kt">uint8_t</span><span class="w"> </span><span class="n">pins</span><span class="p">[</span><span class="n">NUMSTRIPS</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">,</span><span class="w"> </span><span class="mi">13</span><span class="p">,</span><span class="w"> </span><span class="mi">14</span><span class="p">,</span><span class="w"> </span><span class="mi">15</span><span class="p">,</span><span class="w"> </span><span class="mi">16</span><span class="p">};</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="kt">void</span><span class="w"> </span><span class="nf">setup</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span><span class="n">driver</span><span class="p">.</span><span class="n">initled</span><span class="p">(</span><span class="n">leds</span><span class="p">,</span><span class="w"> </span><span class="n">pins</span><span class="p">,</span><span class="w"> </span><span class="n">NUMSTRIPS</span><span class="p">,</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="p">,</span><span class="w"> </span><span class="n">ORDER_GRB</span><span class="p">);</span>
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span><span class="n">driver</span><span class="p">.</span><span class="n">setBrightness</span><span class="p">(</span><span class="mi">128</span><span class="p">);</span>
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="p">}</span>
+<a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>
+<a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="kt">void</span><span class="w"> </span><span class="nf">loop</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">  </span><span class="c1">// fill leds[] …</span>
+<a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">  </span><span class="n">driver</span><span class="p">.</span><span class="n">showPixels</span><span class="p">();</span>
+<a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="p">}</span>
+</code></pre></div>
+<p>For <strong>RGBW</strong> strips (SK6812), use 4 bytes per pixel and <code>ORDER_GRBW</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kt">uint8_t</span><span class="w"> </span><span class="n">leds</span><span class="p">[</span><span class="n">NUMSTRIPS</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">4</span><span class="p">];</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">initled</span><span class="p">(</span><span class="n">leds</span><span class="p">,</span><span class="w"> </span><span class="n">pins</span><span class="p">,</span><span class="w"> </span><span class="n">NUMSTRIPS</span><span class="p">,</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="p">,</span><span class="w"> </span><span class="n">ORDER_GRBW</span><span class="p">);</span>
+</code></pre></div>
+<hr />
+<h2 id="initialisation">Initialisation<a class="headerlink" href="#initialisation" title="Permanent link">&para;</a></h2>
+<h3 id="uniform-strip-lengths">Uniform strip lengths<a class="headerlink" href="#uniform-strip-lengths" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">initled</span><span class="p">(</span><span class="n">leds</span><span class="p">,</span><span class="w"> </span><span class="n">pins</span><span class="p">,</span><span class="w"> </span><span class="n">num_strips</span><span class="p">,</span><span class="w"> </span><span class="n">num_led_per_strip</span><span class="p">,</span><span class="w"> </span><span class="n">colorarrangment</span><span class="p">);</span>
+</code></pre></div>
+<h3 id="variable-strip-lengths">Variable strip lengths<a class="headerlink" href="#variable-strip-lengths" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kt">uint16_t</span><span class="w"> </span><span class="n">lengths</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">200</span><span class="p">,</span><span class="w"> </span><span class="mi">300</span><span class="p">,</span><span class="w"> </span><span class="mi">100</span><span class="p">};</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">initled</span><span class="p">(</span><span class="n">leds</span><span class="p">,</span><span class="w"> </span><span class="n">pins</span><span class="p">,</span><span class="w"> </span><span class="n">lengths</span><span class="p">,</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="n">ORDER_GRB</span><span class="p">);</span>
+</code></pre></div>
+<p>The <code>leds</code> array must be large enough to hold the sum of all strip lengths × bytes-per-pixel.</p>
+<h3 id="color-orders">Color orders<a class="headerlink" href="#color-orders" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Type</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ORDER_GRB</code></td>
+<td>RGB</td>
+<td>Most WS2812 variants</td>
+</tr>
+<tr>
+<td><code>ORDER_RGB</code></td>
+<td>RGB</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ORDER_RBG</code></td>
+<td>RGB</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ORDER_GBR</code></td>
+<td>RGB</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ORDER_BRG</code></td>
+<td>RGB</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ORDER_BGR</code></td>
+<td>RGB</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ORDER_GRBW</code></td>
+<td>RGBW</td>
+<td>SK6812</td>
+</tr>
+<tr>
+<td><code>ORDER_RGBW</code></td>
+<td>RGBW</td>
+<td></td>
+</tr>
+<tr>
+<td><code>ORDER_RGBCCT</code></td>
+<td>RGBCCT</td>
+<td>5-channel tunable white</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="setting-pixels">Setting Pixels<a class="headerlink" href="#setting-pixels" title="Permanent link">&para;</a></h2>
+<h3 id="direct-buffer-write-fastest">Direct buffer write (fastest)<a class="headerlink" href="#direct-buffer-write-fastest" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1">// leds is laid out as: [strip0_led0_R, strip0_led0_G, strip0_led0_B, strip0_led1_R, …, strip1_led0_R, …]</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">leds</span><span class="p">[</span><span class="n">strip</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">led</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">0</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">red</span><span class="p">;</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">leds</span><span class="p">[</span><span class="n">strip</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">led</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">green</span><span class="p">;</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">leds</span><span class="p">[</span><span class="n">strip</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">led</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">2</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">blue</span><span class="p">;</span>
+</code></pre></div>
+<h3 id="helper-rgb">Helper — RGB<a class="headerlink" href="#helper-rgb" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">setPixel</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span><span class="w"> </span><span class="n">red</span><span class="p">,</span><span class="w"> </span><span class="n">green</span><span class="p">,</span><span class="w"> </span><span class="n">blue</span><span class="p">);</span>
+</code></pre></div>
+<p><code>pos</code> is the flat index across all strips: <code>strip * NUM_LEDS_PER_STRIP + led</code>.</p>
+<p>For RGBW drivers, <code>setPixel(pos, r, g, b)</code> automatically derives the white channel using <code>W = min(R,G,B)</code>.</p>
+<h3 id="helper-rgbw-explicit">Helper — RGBW explicit<a class="headerlink" href="#helper-rgbw-explicit" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">setPixel</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span><span class="w"> </span><span class="n">red</span><span class="p">,</span><span class="w"> </span><span class="n">green</span><span class="p">,</span><span class="w"> </span><span class="n">blue</span><span class="p">,</span><span class="w"> </span><span class="n">white</span><span class="p">);</span>
+</code></pre></div>
+<hr />
+<h2 id="brightness-gamma">Brightness &amp; Gamma<a class="headerlink" href="#brightness-gamma" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">setBrightness</span><span class="p">(</span><span class="mi">128</span><span class="p">);</span><span class="w">            </span><span class="c1">// 0–255</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">setGamma</span><span class="p">(</span><span class="mf">2.2f</span><span class="p">,</span><span class="w"> </span><span class="mf">2.2f</span><span class="p">,</span><span class="w"> </span><span class="mf">2.2f</span><span class="p">);</span><span class="w">   </span><span class="c1">// per-channel gamma (RGB)</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">setGamma</span><span class="p">(</span><span class="mf">2.2f</span><span class="p">,</span><span class="w"> </span><span class="mf">2.2f</span><span class="p">,</span><span class="w"> </span><span class="mf">2.2f</span><span class="p">,</span><span class="w"> </span><span class="mf">2.2f</span><span class="p">);</span><span class="w">  </span><span class="c1">// RGBW</span>
+</code></pre></div>
+<p>Gamma and brightness are applied together via lookup tables computed at call time.</p>
+<hr />
+<h2 id="showing-pixels">Showing Pixels<a class="headerlink" href="#showing-pixels" title="Permanent link">&para;</a></h2>
+<h3 id="blocking-default">Blocking (default)<a class="headerlink" href="#blocking-default" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixels</span><span class="p">();</span><span class="w">              </span><span class="c1">// uses the buffer set in initled()</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixels</span><span class="p">(</span><span class="n">newBuffer</span><span class="p">);</span><span class="w">     </span><span class="c1">// switch to a different buffer this frame</span>
+</code></pre></div>
+<p>Both calls wait until the DMA transfer completes before returning.</p>
+<h3 id="non-blocking">Non-blocking<a class="headerlink" href="#non-blocking" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixels</span><span class="p">(</span><span class="n">NO_WAIT</span><span class="p">);</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="c1">// CPU is free here; the next showPixels(NO_WAIT) will wait for the</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="c1">// previous one to finish before starting.</span>
+</code></pre></div>
+<h3 id="with-a-hardware-scroll-offset">With a hardware scroll offset<a class="headerlink" href="#with-a-hardware-scroll-offset" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">OffsetDisplay</span><span class="w"> </span><span class="n">off</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">driver</span><span class="p">.</span><span class="n">getDefaultOffset</span><span class="p">();</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">off</span><span class="p">.</span><span class="n">offsetx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span><span class="w">   </span><span class="c1">// scroll 5 pixels in X</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixels</span><span class="p">(</span><span class="n">off</span><span class="p">);</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixels</span><span class="p">(</span><span class="n">NO_WAIT</span><span class="p">,</span><span class="w"> </span><span class="n">off</span><span class="p">);</span>
+</code></pre></div>
+<p>Requires <code>#define ENABLE_HARDWARE_SCROLL</code> before the include.</p>
+<hr />
+<h2 id="full-dma-buffer-mode">Full DMA Buffer Mode<a class="headerlink" href="#full-dma-buffer-mode" title="Permanent link">&para;</a></h2>
+<p>Add <code>#define FULL_DMA_BUFFER</code> before the include. This pre-transposes the entire frame into a large DMA buffer. The I2S then runs autonomously with no CPU involvement during transmission.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="cp">#define FULL_DMA_BUFFER</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;I2SClocklessLedDriver.h&quot;</span>
+</code></pre></div>
+<h3 id="transpose-then-display">Transpose then display<a class="headerlink" href="#transpose-then-display" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFirstTranspose</span><span class="p">();</span><span class="w">           </span><span class="c1">// transposes + displays, waits</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFirstTranspose</span><span class="p">(</span><span class="n">NO_WAIT</span><span class="p">);</span><span class="w">    </span><span class="c1">// transposes + displays, returns immediately</span>
+<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFirstTranspose</span><span class="p">(</span><span class="n">newBuffer</span><span class="p">);</span><span class="w">  </span><span class="c1">// transposes newBuffer + displays</span>
+</code></pre></div>
+<p>The transposition step (~1 ms for 256 LEDs) happens on the CPU; the DMA transmission (~18 ms for 256 LEDs at 800 kHz) runs independently.</p>
+<h3 id="direct-dma-buffer-write">Direct DMA buffer write<a class="headerlink" href="#direct-dma-buffer-write" title="Permanent link">&para;</a></h3>
+<p>Use <code>setPixelinBuffer()</code> / <code>setPixelinBufferByStrip()</code> to write pixels directly into the pre-transposed DMA buffer, bypassing the per-frame transposition:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">setPixelinBuffer</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span><span class="w"> </span><span class="n">red</span><span class="p">,</span><span class="w"> </span><span class="n">green</span><span class="p">,</span><span class="w"> </span><span class="n">blue</span><span class="p">);</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">setPixelinBuffer</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span><span class="w"> </span><span class="n">red</span><span class="p">,</span><span class="w"> </span><span class="n">green</span><span class="p">,</span><span class="w"> </span><span class="n">blue</span><span class="p">,</span><span class="w"> </span><span class="n">white</span><span class="p">);</span><span class="w">  </span><span class="c1">// RGBW</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">setPixelinBufferByStrip</span><span class="p">(</span><span class="n">stripNumber</span><span class="p">,</span><span class="w"> </span><span class="n">posOnStrip</span><span class="p">,</span><span class="w"> </span><span class="n">red</span><span class="p">,</span><span class="w"> </span><span class="n">green</span><span class="p">,</span><span class="w"> </span><span class="n">blue</span><span class="p">);</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Do not mix <code>setPixelinBuffer</code> with <code>showPixelsFirstTranspose()</code> — the transpose will overwrite what you wrote directly.</p>
+</div>
+<p>Then display with:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFromBuffer</span><span class="p">();</span><span class="w">           </span><span class="c1">// display once, blocking</span>
+<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFromBuffer</span><span class="p">(</span><span class="n">NO_WAIT</span><span class="p">);</span><span class="w">    </span><span class="c1">// display once, non-blocking</span>
+<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFromBuffer</span><span class="p">(</span><span class="n">LOOP</span><span class="p">);</span><span class="w">       </span><span class="c1">// continuous loop, no CPU required</span>
+</code></pre></div>
+<h3 id="continuous-loop">Continuous loop<a class="headerlink" href="#continuous-loop" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">showPixelsFromBuffer</span><span class="p">(</span><span class="n">LOOP</span><span class="p">);</span>
+<a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="c1">// CPU is now completely free; the DMA buffer is re-displayed on every frame</span>
+<a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a>
+<a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="c1">// To stop the loop:</span>
+<a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="n">driver</span><span class="p">.</span><span class="n">stopDisplayLoop</span><span class="p">();</span>
+</code></pre></div>
+<h3 id="frame-sync">Frame sync<a class="headerlink" href="#frame-sync" title="Permanent link">&para;</a></h3>
+<p>When using <code>LOOP</code>, use <code>waitSync()</code> to align your buffer writes to a frame boundary and avoid tearing:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="n">driver</span><span class="p">.</span><span class="n">waitSync</span><span class="p">();</span>
+<a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="c1">// safe to update the DMA buffer now</span>
+<a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">setPixelinBuffer</span><span class="p">(</span><span class="n">pos</span><span class="p">,</span><span class="w"> </span><span class="n">r</span><span class="p">,</span><span class="w"> </span><span class="n">g</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">);</span>
+</code></pre></div>
+<hr />
+<h2 id="runtime-reconfiguration">Runtime Reconfiguration<a class="headerlink" href="#runtime-reconfiguration" title="Permanent link">&para;</a></h2>
+<p><code>updateDriver()</code> reconfigures the driver at runtime (pin map, strip count/lengths, DMA buffer depth, colour order) without rebooting. It safely quiesces any in-flight DMA transfer before applying changes.</p>
+<p><code>deleteDriver()</code> releases all DMA buffers and is safe to call multiple times. Call it before destroying the driver object or before a deep sleep that releases peripherals.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="kt">uint8_t</span><span class="w"> </span><span class="n">newPins</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="mi">5</span><span class="p">,</span><span class="w"> </span><span class="mi">12</span><span class="p">};</span>
+<a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="kt">uint16_t</span><span class="w"> </span><span class="n">newSizes</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">100</span><span class="p">,</span><span class="w"> </span><span class="mi">200</span><span class="p">,</span><span class="w"> </span><span class="mi">150</span><span class="p">,</span><span class="w"> </span><span class="mi">300</span><span class="p">};</span>
+<a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="n">driver</span><span class="p">.</span><span class="n">updateDriver</span><span class="p">(</span><span class="n">newPins</span><span class="p">,</span><span class="w"> </span><span class="n">newSizes</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span><span class="w"> </span><span class="cm">/*dmaBuffer=*/</span><span class="mi">6</span><span class="p">,</span>
+<a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">                    </span><span class="cm">/*nb_components=*/</span><span class="mi">3</span><span class="p">,</span><span class="w"> </span><span class="cm">/*p_r=*/</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="cm">/*p_g=*/</span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="cm">/*p_b=*/</span><span class="mi">2</span><span class="p">);</span>
+<a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>
+<a id="__codelineno-18-6" name="__codelineno-18-6" href="#__codelineno-18-6"></a><span class="c1">// Release all DMA resources:</span>
+<a id="__codelineno-18-7" name="__codelineno-18-7" href="#__codelineno-18-7"></a><span class="n">driver</span><span class="p">.</span><span class="n">deleteDriver</span><span class="p">();</span>
+</code></pre></div>
+<hr />
+<h2 id="hardware-sprites">Hardware Sprites<a class="headerlink" href="#hardware-sprites" title="Permanent link">&para;</a></h2>
+<p>Requires <code>#define HARDWARESPRITES 1</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a><span class="cp">#define NBSPRITE 4</span>
+<a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="cp">#define SPRITE_WIDTH 8</span>
+<a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a><span class="cp">#define SPRITE_HEIGHT 8</span>
+<a id="__codelineno-19-4" name="__codelineno-19-4" href="#__codelineno-19-4"></a><span class="cp">#define HARDWARESPRITES 1</span>
+<a id="__codelineno-19-5" name="__codelineno-19-5" href="#__codelineno-19-5"></a><span class="cp">#include</span><span class="w"> </span><span class="cpf">&quot;I2SClocklessLedDriver.h&quot;</span>
+<a id="__codelineno-19-6" name="__codelineno-19-6" href="#__codelineno-19-6"></a>
+<a id="__codelineno-19-7" name="__codelineno-19-7" href="#__codelineno-19-7"></a><span class="n">HardwareSprite</span><span class="w"> </span><span class="n">sprite</span><span class="p">;</span>
+<a id="__codelineno-19-8" name="__codelineno-19-8" href="#__codelineno-19-8"></a><span class="n">sprite</span><span class="p">.</span><span class="n">posX</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">10</span><span class="p">;</span>
+<a id="__codelineno-19-9" name="__codelineno-19-9" href="#__codelineno-19-9"></a><span class="n">sprite</span><span class="p">.</span><span class="n">posY</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">5</span><span class="p">;</span>
+<a id="__codelineno-19-10" name="__codelineno-19-10" href="#__codelineno-19-10"></a><span class="n">sprite</span><span class="p">.</span><span class="n">displaySprite</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">true</span><span class="p">;</span>
+</code></pre></div>
+<p>Each <code>hardwareSprite</code> writes into a pre-allocated segment of <code>_spritesleds[]</code>. A maximum of <code>NBSPRITE</code> sprites can be constructed.</p>
+<hr />
+<h2 id="framebuffer">FrameBuffer<a class="headerlink" href="#framebuffer" title="Permanent link">&para;</a></h2>
+<p><code>FrameBuffer</code> is a simple double-buffer helper. Always check <code>valid()</code> after construction — it returns <code>false</code> if the heap allocation failed:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a><span class="n">FrameBuffer</span><span class="w"> </span><span class="nf">fb</span><span class="p">(</span><span class="n">numStrips</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">numLedsPerStrip</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">3</span><span class="p">);</span>
+<a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">fb</span><span class="p">.</span><span class="n">valid</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">    </span><span class="c1">// allocation failed — do not use fb</span>
+<a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="p">}</span>
+</code></pre></div>
+<hr />
+<h2 id="pixels">Pixels<a class="headerlink" href="#pixels" title="Permanent link">&para;</a></h2>
+<p><code>Pixels</code> objects support copy-construction (creates a lightweight non-owning view of the source buffer) but <strong>assignment is deleted</strong> — <code>p = other;</code> is a compile error by design. Use copy-initialisation instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a><span class="n">Pixels</span><span class="w"> </span><span class="n">view</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">original</span><span class="p">;</span><span class="w">  </span><span class="c1">// OK — lightweight view</span>
+<a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="c1">// view = other;         // compile error</span>
+</code></pre></div>
+<p><code>getStrip(n)</code> returns an empty <code>Pixels</code> object (size 0, null pointer) if <code>n</code> is out of range, rather than crashing.</p>
+<hr />
+<h2 id="using-with-fastled">Using with FastLED<a class="headerlink" href="#using-with-fastled" title="Permanent link">&para;</a></h2>
+<p><code>CRGB</code> arrays are layout-compatible with the <code>uint8_t*</code> buffers this driver expects:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-22-1" name="__codelineno-22-1" href="#__codelineno-22-1"></a><span class="n">CRGB</span><span class="w"> </span><span class="n">leds</span><span class="p">[</span><span class="n">NUMSTRIPS</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="p">];</span>
+<a id="__codelineno-22-2" name="__codelineno-22-2" href="#__codelineno-22-2"></a><span class="n">driver</span><span class="p">.</span><span class="n">initled</span><span class="p">((</span><span class="kt">uint8_t</span><span class="o">*</span><span class="p">)</span><span class="n">leds</span><span class="p">,</span><span class="w"> </span><span class="n">pins</span><span class="p">,</span><span class="w"> </span><span class="n">NUMSTRIPS</span><span class="p">,</span><span class="w"> </span><span class="n">NUM_LEDS_PER_STRIP</span><span class="p">,</span><span class="w"> </span><span class="n">ORDER_GRB</span><span class="p">);</span>
+<a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="n">FastLED</span><span class="p">.</span><span class="n">setBrightness</span><span class="p">(</span><span class="mi">128</span><span class="p">);</span><span class="w">  </span><span class="c1">// note: use driver.setBrightness instead</span>
+</code></pre></div>
+<hr />
+<h2 id="compile-time-options">Compile-time Options<a class="headerlink" href="#compile-time-options" title="Permanent link">&para;</a></h2>
+<p>Set these <strong>before</strong> <code>#include "I2SClocklessLedDriver.h"</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Define</th>
+<th>Default</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FULL_DMA_BUFFER</code></td>
+<td>off</td>
+<td>Enable full pre-transposed DMA buffer mode</td>
+</tr>
+<tr>
+<td><code>ENABLE_HARDWARE_SCROLL</code></td>
+<td>off</td>
+<td>Enable <code>OffsetDisplay</code> hardware scrolling</td>
+</tr>
+<tr>
+<td><code>USE_PIXELSLIB</code></td>
+<td>off</td>
+<td>Use external PixelsLib types</td>
+</tr>
+<tr>
+<td><code>HARDWARESPRITES 1</code></td>
+<td>0</td>
+<td>Enable hardware sprite overlay</td>
+</tr>
+<tr>
+<td><code>NBSPRITE</code></td>
+<td>8</td>
+<td>Maximum number of sprite objects</td>
+</tr>
+<tr>
+<td><code>SPRITE_WIDTH</code></td>
+<td>20</td>
+<td>Sprite width in pixels</td>
+</tr>
+<tr>
+<td><code>SPRITE_HEIGHT</code></td>
+<td>20</td>
+<td>Sprite height in pixels</td>
+</tr>
+<tr>
+<td><code>SNAKEPATTERN</code></td>
+<td>1</td>
+<td>1 = strips in snake layout</td>
+</tr>
+<tr>
+<td><code>ALTERNATEPATTERN</code></td>
+<td>1</td>
+<td>1 = strips start on alternate sides</td>
+</tr>
+<tr>
+<td><code>OVERCLOCK_1MHZ</code></td>
+<td>off</td>
+<td>1 MHz clock (S3 only)</td>
+</tr>
+<tr>
+<td><code>OVERCLOCK_1_1MHZ</code></td>
+<td>off</td>
+<td>1.1 MHz clock (S3 only)</td>
+</tr>
+<tr>
+<td><code>OVER_CLOCK_MAX</code></td>
+<td>off</td>
+<td>~1.12 MHz clock (S3 only)</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

@@ -1,0 +1,1084 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="ESP32 I2S/DMA parallel LED strip driver for WS2812/SK6812">
+      
+      
+      
+        <link rel="canonical" href="https://hpwit.github.io/I2SClocklessLedDriver/developer/developer/">
+      
+      
+        <link rel="prev" href="../../enduser/enduser/">
+      
+      
+        <link rel="next" href="../standardsandguidelines/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Architecture & Internals - I2SClocklessLedDriver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="cyan">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#developer-guide" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="I2SClocklessLedDriver" class="md-header__button md-logo" aria-label="I2SClocklessLedDriver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            I2SClocklessLedDriver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Architecture & Internals
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="cyan"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/hpwit/I2SClocklessLedDriver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hpwit/I2SClocklessLedDriver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../enduser/enduser/" class="md-tabs__link">
+          
+  
+  
+  End User Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
+          
+  
+  
+  Developer Guide
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="I2SClocklessLedDriver" class="md-nav__button md-logo" aria-label="I2SClocklessLedDriver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    I2SClocklessLedDriver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/hpwit/I2SClocklessLedDriver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    hpwit/I2SClocklessLedDriver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    End User Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    End User Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../enduser/enduser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Developer Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Developer Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Internals
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture & Internals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#repository-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Repository layout
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#dma-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DMA pipeline
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="DMA pipeline">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#ping-pong-mode-default" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ping-pong mode (default)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#full-dma-buffer-mode-full_dma_buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full DMA buffer mode (FULL_DMA_BUFFER)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#platform-branching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Platform branching
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#idf-version-branching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        IDF version branching
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#semaphores" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Semaphores
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#memory-layout-full_dma_buffer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Memory layout (FULL_DMA_BUFFER)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-a-new-target" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding a new target
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-system" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build system
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#design-decisions-and-known-issues" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design decisions and known issues
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Design decisions and known issues">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#no-more-mutable-globals-commit-54db938" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No more mutable globals (commit 54db938)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pixels-copy-semantics-intentional-asymmetry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pixels copy semantics — intentional asymmetry
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#hardwarespritereorder-caller-precondition" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HardwareSprite::reorder() — caller precondition
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#toolspatch_compile_dbpy-known-issue-with-xtensa-stubs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tools/patch_compile_db.py — known issue with xtensa stubs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#ci" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CI
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="CI">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#clang-tidy-exit-code-handling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        clang-tidy exit code handling
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../standardsandguidelines/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Standards & Guidelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="developer-guide">Developer Guide<a class="headerlink" href="#developer-guide" title="Permanent link">&para;</a></h1>
+<h2 id="repository-layout">Repository layout<a class="headerlink" href="#repository-layout" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/I2SClocklessLedDriver.h</code></td>
+<td>Full driver class + all static ISR/transpose functions</td>
+</tr>
+<tr>
+<td><code>src/I2SClocklessLedDriver.cpp</code></td>
+<td><code>updateDriver()</code> / <code>deleteDriver()</code> implementations</td>
+</tr>
+<tr>
+<td><code>src/pixeltypes.h</code></td>
+<td><code>Pixel</code> struct and <code>Pixels</code> container (used when <code>USE_PIXELSLIB</code> is not set)</td>
+</tr>
+<tr>
+<td><code>src/framebuffer.h</code></td>
+<td>Simple double-buffer helper</td>
+</tr>
+<tr>
+<td><code>src/HardwareSprite.h/.cpp</code></td>
+<td>Hardware sprite overlay (opt-in with <code>HARDWARESPRITES 1</code>)</td>
+</tr>
+<tr>
+<td><code>src/helper.h</code></td>
+<td>Timing macros (<code>HOW_LONG</code>, <code>RUN_SKETCH_FOR</code>, <code>RUN_SKETCH_N_TIMES</code>)</td>
+</tr>
+<tr>
+<td><code>src/main.cpp</code></td>
+<td>Development sketch — excluded from library builds via <code>library.json</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="dma-pipeline">DMA pipeline<a class="headerlink" href="#dma-pipeline" title="Permanent link">&para;</a></h2>
+<p>Each LED bit is encoded as 3 I2S clock ticks: <code>100</code> = 0-bit, <code>110</code> = 1-bit. The I2S peripheral outputs 16 bits in parallel at each tick, so one tick drives one bit of all 16 strips simultaneously.</p>
+<p><strong>Transposition</strong> converts the per-strip linear layout (<code>strip0_led0, strip0_led1, …, strip1_led0, …</code>) into the parallel 16-bit I2S word format. <code>transpose16x1_noinline2()</code> in the header handles one 16-strip × 8-bit block using a bitwise in-place matrix transpose.</p>
+<h3 id="ping-pong-mode-default">Ping-pong mode (default)<a class="headerlink" href="#ping-pong-mode-default" title="Permanent link">&para;</a></h3>
+<p>Two small DMA buffers (<code>dmaBuffersTampon[0..N+1]</code>) are filled one at a time by the ISR. Each ISR call transposes and loads the next LED into the currently-idle buffer. This uses minimal RAM but requires an ISR call per LED column.</p>
+<p>The ISR (<code>interruptHandler</code> on S3, <code>interruptHandler</code> on ESP32) is <code>IRAM_ATTR</code>-placed and only uses ISR-safe FreeRTOS primitives.</p>
+<h3 id="full-dma-buffer-mode-full_dma_buffer">Full DMA buffer mode (<code>FULL_DMA_BUFFER</code>)<a class="headerlink" href="#full-dma-buffer-mode-full_dma_buffer" title="Permanent link">&para;</a></h3>
+<p><code>transposeAll()</code> pre-transposes the entire frame into <code>dmaBuffersTransposed[0..num_led_per_strip+1]</code> before the transfer starts. The I2S then runs through the entire chain without interrupts, freeing the CPU completely.</p>
+<p>This also enables the <code>LOOP</code> display mode: the last DMA descriptor points back to the first, creating a continuous ring that the DMA/I2S hardware replays indefinitely.</p>
+<hr />
+<h2 id="platform-branching">Platform branching<a class="headerlink" href="#platform-branching" title="Permanent link">&para;</a></h2>
+<p>All hardware-specific code is guarded by the target defines injected by PlatformIO:</p>
+<table>
+<thead>
+<tr>
+<th>Define</th>
+<th>Peripheral used</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CONFIG_IDF_TARGET_ESP32S3</code></td>
+<td>LCD_CAM + GDMA (<code>gdma_new_ahb_channel</code>)</td>
+</tr>
+<tr>
+<td><code>CONFIG_IDF_TARGET_ESP32</code></td>
+<td>I2S0 + <code>esp_intr_alloc</code></td>
+</tr>
+<tr>
+<td><code>CONFIG_IDF_TARGET_ESP32P4</code></td>
+<td>AXI GDMA (virtual driver path only, physical not yet implemented)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="idf-version-branching">IDF version branching<a class="headerlink" href="#idf-version-branching" title="Permanent link">&para;</a></h2>
+<p>Remaining <code>#if ESP_IDF_VERSION &gt;= ESP_IDF_VERSION_VAL(5, 5, 0)</code> checks all cover genuine API changes:</p>
+<ul>
+<li><strong>Header locations</strong> — <code>&lt;esp_private/gpio.h&gt;</code> (≥ 5.5) vs <code>&lt;driver/gpio.h&gt;</code> (&lt; 5.5)</li>
+<li><strong>GPIO mux function</strong> (S3) — <code>gpio_iomux_output()</code> vs <code>gpio_iomux_out()</code></li>
+<li><strong>GDMA alloc</strong> (S3) — <code>gdma_new_ahb_channel()</code> vs <code>gdma_new_channel()</code> (<code>isr_cache_safe=true</code> crashes on 5.5+)</li>
+</ul>
+<p>All other previously version-gated code (<code>NUM_STRIPS</code>, <code>__NB_DMA_BUFFER</code>, <code>__delay</code>, <code>DMABuffersTampon</code>, <code>updateDriver</code>, <code>deleteDriver</code>, transpose runtime check) is now unconditional — the 5.5+ design (runtime variables, dynamic allocation) is used on all supported IDF versions.</p>
+<hr />
+<h2 id="semaphores">Semaphores<a class="headerlink" href="#semaphores" title="Permanent link">&para;</a></h2>
+<p>Three FreeRTOS semaphores live on the driver object:</p>
+<table>
+<thead>
+<tr>
+<th>Member</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sem</code></td>
+<td>Blocks <code>showPixels(WAIT)</code> until transfer done</td>
+</tr>
+<tr>
+<td><code>semSync</code></td>
+<td>Frame-sync signal for <code>waitSync()</code></td>
+</tr>
+<tr>
+<td><code>waitDisp</code></td>
+<td>Lazy-created; used by <code>showPixels(NO_WAIT)</code>, <code>waitDisplay()</code>, and <code>updateDriver()</code> to wait for an in-flight transfer before proceeding</td>
+</tr>
+</tbody>
+</table>
+<p><code>wasWaitingtofinish</code> is a flag set by any caller that is about to block on <code>waitDisp</code>. The ISR checks the flag in <code>i2sStop()</code> and only calls <code>xSemaphoreGiveFromISR</code> when a waiter is present, preventing spurious semaphore count accumulation.</p>
+<p>All semaphore operations inside <code>i2sStop()</code> use <code>xSemaphoreGiveFromISR</code> + <code>portYIELD_FROM_ISR</code>, as required for ISR context.</p>
+<hr />
+<h2 id="memory-layout-full_dma_buffer">Memory layout (<code>FULL_DMA_BUFFER</code>)<a class="headerlink" href="#memory-layout-full_dma_buffer" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>dmaBuffersTransposed[0]          — preamble (all zeros)
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>dmaBuffersTransposed[1..N]       — one buffer per LED column (transposed)
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>dmaBuffersTransposed[N+1]        — postamble (4× longer for reset timing)
+</code></pre></div>
+<p>In <code>LOOP</code> mode, <code>dmaBuffersTransposed[N+1]-&gt;next</code> points back to <code>dmaBuffersTransposed[0]</code>. <code>stopDisplayLoop()</code> sets that pointer to <code>NULL</code>.</p>
+<hr />
+<h2 id="adding-a-new-target">Adding a new target<a class="headerlink" href="#adding-a-new-target" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Add a <code>[env:your-target]</code> section in <code>platformio.ini</code> with the matching <code>CONFIG_IDF_TARGET_*</code> build flag.</li>
+<li>Add an <code>i2sInit()</code> branch in <code>I2SClocklessLedDriver.h</code> guarded by the new target define, initialising the appropriate DMA peripheral.</li>
+<li>Add an ISR handler function for the new peripheral.</li>
+<li>Add an <code>i2sStart()</code> branch to kick off the DMA transfer.</li>
+<li>If the target uses a different GDMA variant (e.g., AXI GDMA on P4), add a matching <code>gdma_new_axi_channel</code> call in the <code>&gt;= 5.5.0</code> branch.</li>
+</ol>
+<hr />
+<h2 id="build-system">Build system<a class="headerlink" href="#build-system" title="Permanent link">&para;</a></h2>
+<p>The project uses <strong>PlatformIO</strong>. Defined environments:</p>
+<table>
+<thead>
+<tr>
+<th>Environment</th>
+<th>Chip</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>esp32dev</code></td>
+<td>ESP32</td>
+</tr>
+<tr>
+<td><code>esp-wrover-kit</code></td>
+<td>ESP32 (WROVER with PSRAM)</td>
+</tr>
+<tr>
+<td><code>esp32-s3-devkitc-1</code></td>
+<td>ESP32-S3</td>
+</tr>
+<tr>
+<td><code>esp32-p4</code></td>
+<td>ESP32-P4</td>
+</tr>
+</tbody>
+</table>
+<p>Common platform: <code>pioarduino</code> (tracks upstream Espressif releases closely). Check <code>platformio.ini</code> for the pinned version.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pio<span class="w"> </span>run<span class="w"> </span>-e<span class="w"> </span>esp32-s3-devkitc-1<span class="w">          </span><span class="c1"># build</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>pio<span class="w"> </span>run<span class="w"> </span>-e<span class="w"> </span>esp32-s3-devkitc-1<span class="w"> </span>-t<span class="w"> </span>upload<span class="w">  </span><span class="c1"># flash</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>pio<span class="w"> </span>device<span class="w"> </span>monitor<span class="w">                       </span><span class="c1"># serial monitor</span>
+</code></pre></div>
+<hr />
+<h2 id="design-decisions-and-known-issues">Design decisions and known issues<a class="headerlink" href="#design-decisions-and-known-issues" title="Permanent link">&para;</a></h2>
+<h3 id="no-more-mutable-globals-commit-54db938">No more mutable globals (commit 54db938)<a class="headerlink" href="#no-more-mutable-globals-commit-54db938" title="Permanent link">&para;</a></h3>
+<p><code>gNbDmaBuffer</code> and <code>gNumStrips</code> were file-scope globals. With two <code>I2SClocklessLedDriver</code> instances they would share state and cause a data race. They were removed as follows:</p>
+<ul>
+<li><code>gNbDmaBuffer</code> → class member <code>nbDmaBuffer</code> (default 6, not <code>volatile</code>). <code>volatile</code> is unnecessary because <code>updateDriver()</code> always waits for DMA to quiesce via semaphore before writing it; the ISR therefore never runs concurrently with a write.</li>
+<li><code>gNumStrips</code> → parameter on <code>transpose16x1Noinline2()</code>; the ISR passes <code>driver-&gt;numStrips</code> (already <code>volatile</code>) directly.</li>
+</ul>
+<h3 id="pixels-copy-semantics-intentional-asymmetry"><code>Pixels</code> copy semantics — intentional asymmetry<a class="headerlink" href="#pixels-copy-semantics-intentional-asymmetry" title="Permanent link">&para;</a></h3>
+<p>The copy constructor produces a <em>non-owning view</em>: it copies <code>ledpointer</code> and sizes but clears <code>localLedPointer</code>, <code>mapFunction</code>, and <code>arguments</code>. <code>operator=</code> is deleted to prevent silent shallow copies that could outlive the source buffer. Do not treat the missing assignment operator as a defect.</p>
+<h3 id="hardwarespritereorder-caller-precondition"><code>HardwareSprite::reorder()</code> — caller precondition<a class="headerlink" href="#hardwarespritereorder-caller-precondition" title="Permanent link">&para;</a></h3>
+<p><code>target</code> carries no size metadata. The bounds check (<code>pixelOffset &gt;= 0 &amp;&amp; pixelOffset &lt; width * height</code>) only validates within the declared dimensions; if the <code>target</code> allocation is actually smaller than <code>width * height</code>, writes will overflow silently. Adding a <code>targetSize</code> parameter would just shift the error surface without preventing it. Document and enforce as a caller precondition: <em>the <code>target</code> buffer must hold at least <code>width * height</code> <code>uint16_t</code> elements.</em></p>
+<h3 id="toolspatch_compile_dbpy-known-issue-with-xtensa-stubs"><code>tools/patch_compile_db.py</code> — known issue with xtensa stubs<a class="headerlink" href="#toolspatch_compile_dbpy-known-issue-with-xtensa-stubs" title="Permanent link">&para;</a></h3>
+<p>The script currently copies xtensa base headers into the live PlatformIO package tree (<code>~/.platformio/packages/framework-arduinoespressif32-libs/…/xtensa/</code>). This corrupts subsequent <code>pio run</code> builds with <code>'xthal_set_intset' was not declared in this scope</code> errors.</p>
+<p><strong>Recovery:</strong> <code>rm -rf ~/.platformio/packages/framework-arduinoespressif32-libs</code></p>
+<p><strong>Pending fix:</strong> write stubs to <code>OUTPUT_DIR/xtensa_stubs/</code> and inject via <code>-isystem</code> instead of mutating system packages.</p>
+<hr />
+<h2 id="ci">CI<a class="headerlink" href="#ci" title="Permanent link">&para;</a></h2>
+<p>Two GitHub Actions workflows are provided:</p>
+<ul>
+<li><strong><code>.github/workflows/build.yml</code></strong> — compiles all four PlatformIO environments on every push and pull request.</li>
+<li><strong><code>.github/workflows/lint.yml</code></strong> — runs <code>cppcheck</code> and <code>clang-tidy</code> on every push and pull request.</li>
+<li><strong><code>.github/workflows/docs.yml</code></strong> — builds and deploys this MkDocs site to GitHub Pages on every push to <code>main</code>.</li>
+</ul>
+<p>To enable GitHub Pages deployment, go to <strong>Settings → Pages</strong> and set the source to the <code>gh-pages</code> branch.</p>
+<h3 id="clang-tidy-exit-code-handling">clang-tidy exit code handling<a class="headerlink" href="#clang-tidy-exit-code-handling" title="Permanent link">&para;</a></h3>
+<p><code>clang-tidy</code> always exits non-zero when cross-compilation headers (xtensa, newlib, RISC-V) cause fatal errors on the host toolchain. The lint workflow therefore captures output via command substitution with <code>|| true</code> and only fails if the captured output contains violation lines anchored to <code>$(pwd)/src/</code>. Do <strong>not</strong> remove <code>|| true</code> or add <code>set -e</code> around the clang-tidy step — that would turn every cross-compilation header error into a CI failure.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
