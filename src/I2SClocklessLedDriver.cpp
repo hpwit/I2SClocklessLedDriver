@@ -120,12 +120,14 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
  *  multiple times (all pointers are nulled after free). */
 void I2SClocklessLedDriver::deleteDriver() {
 #ifdef CONFIG_IDF_TARGET_ESP32P4
+  #if HAS_PARLIO_DRIVER
   if (p4TxUnit != NULL) {
     parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY);
     parlio_tx_unit_disable(p4TxUnit);
     parlio_del_tx_unit(p4TxUnit);
     p4TxUnit = NULL;
   }
+  #endif
   if (p4Buffer1) { heap_caps_free(p4Buffer1); p4Buffer1 = nullptr; }
   if (p4Buffer2) { heap_caps_free(p4Buffer2); p4Buffer2 = nullptr; }
   p4BufferActive      = nullptr;

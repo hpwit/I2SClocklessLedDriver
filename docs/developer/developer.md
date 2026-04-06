@@ -80,7 +80,7 @@ The PARLIO approach was originally developed by **@troyhacks** and extended with
 
 ### `initLedImpl()` on P4
 
-On ESP32-P4, `initLedImpl()` stores the pin numbers in `p4Pins[]` and calls `setBrightness()` to initialise the LUT tables, then returns immediately — no I2S peripheral or DMA buffer allocation takes place.  The PARLIO unit is created lazily on the first `showPixels()` call.
+On ESP32-P4, `initLedImpl()` stores the pins in `p4Pins[]` and calls `setBrightness()` to initialise the LUT tables, then returns immediately — no I2S peripheral or DMA buffer allocation takes place.  The PARLIO unit is created lazily on the first `showPixels()` call.
 
 ### `updateDriver()` on P4
 

@@ -30,6 +30,16 @@
   #include "freertos/semphr.h"
   #include "freertos/task.h"
   #include "esp_heap_caps.h"
+  
+  // PARLIO driver (requires ESP-IDF v5.1+)
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
+    #include "driver/parlio_tx.h"
+    #define HAS_PARLIO_DRIVER 1
+  #else
+    #warning "ESP32-P4 PARLIO support requires ESP-IDF v5.1 or later"
+    #define HAS_PARLIO_DRIVER 0
+  #endif
+  
   #include "parlio_p4.h"
 #else
 // IDF5.5: replace #include driver by #include esp_private
@@ -364,9 +374,11 @@ class I2SClocklessLedDriver {
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
 
-  // PARLIO peripheral handle and configuration.
+  // PARLIO peripheral handle and configuration (only available in ESP-IDF v5.1+).
+  #if HAS_PARLIO_DRIVER
   parlio_tx_unit_handle_t p4TxUnit  = NULL;
   parlio_tx_unit_config_t p4Config  = {};
+  #endif
 
   // Topology-change detection: force PARLIO reconfiguration when these differ.
   bool p4SetupDone        = false;
@@ -1429,12 +1441,32 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     setPins(pinsq);
 
     static const uint32_t P4_BUF_BYTES = 1024u * 5u * 32u * 16u / 8u;  // 327,680 bytes
-    if (!p4Buffer1)
+    
+    // Allocate buffers with proper error handling
+    if (!p4Buffer1) {
       p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(P4_BUF_BYTES, 1, 2,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-    if (!p4Buffer2)
+      if (!p4Buffer1) {
+        ESP_LOGE(TAG, "Failed to allocate p4Buffer1 - out of memory");
+        p4SetupDone = false;
+        return;
+      }
+    }
+    
+    if (!p4Buffer2) {
       p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(P4_BUF_BYTES, 1, 2,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+      if (!p4Buffer2) {
+        ESP_LOGE(TAG, "Failed to allocate p4Buffer2 - out of memory");
+        // Free the first buffer to avoid memory leak
+        heap_caps_free(p4Buffer1);
+        p4Buffer1 = nullptr;
+        p4BufferActive = nullptr;
+        p4SetupDone = false;
+        return;
+      }
+    }
+    
     p4BufferActive = p4Buffer1;
 
     // Force PARLIO reconfiguration on the next showPixels().

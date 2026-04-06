@@ -21,7 +21,12 @@
 
 #include "I2SClocklessLedDriver.h"
 
+#include "Arduino.h"
+#if HAS_PARLIO_DRIVER
 #include "driver/parlio_tx.h"
+#endif
+#include "esp_attr.h"
+#include "esp_err.h"
 #include "portmacro.h"
 #include "soc/soc_caps.h"
 #include "esp_log.h"
@@ -148,6 +153,18 @@ void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transp
 }  // namespace LedMatrixDetail
 
 // ---------------------------------------------------------------------------
+// Safe LUT access helper
+// ---------------------------------------------------------------------------
+
+/**
+ * safeLutLookup — safely access a LUT with fallback to identity mapping
+ * if the LUT pointer is null (e.g., before setBrightness() is called).
+ */
+static inline uint8_t safeLutLookup(uint8_t* lut, uint8_t value) {
+    return lut ? lut[value] : value;
+}
+
+// ---------------------------------------------------------------------------
 // Per-pixel colour mapping  (brightness + gamma LUTs, wire-order repack)
 // ---------------------------------------------------------------------------
 
@@ -160,6 +177,7 @@ void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transp
  *
  * Bug fixed vs original parlio.cpp: warm white now correctly uses white2Map
  * instead of whiteMap.
+ * Safety improvement: checks LUT pointers before dereferencing.
  */
 static void rgbwBufferMapping(uint8_t* packetRGBChannel,
                                const uint8_t* lightsRGBChannel,
@@ -182,17 +200,17 @@ static void rgbwBufferMapping(uint8_t* packetRGBChannel,
             green -= white;
             blue  -= white;
         }
-        packetRGBChannel[offsetWhite] = driver->whiteMap[white];
+        packetRGBChannel[offsetWhite] = safeLutLookup(driver->whiteMap, white);
     }
 
     // 🌙 Warm white (RGBCCT): input byte 4, use white2Map (bug fix: was whiteMap)
     if (offsetWhite2 != UINT8_MAX) {
-        packetRGBChannel[offsetWhite2] = driver->white2Map[lightsRGBChannel[4]];
+        packetRGBChannel[offsetWhite2] = safeLutLookup(driver->white2Map, lightsRGBChannel[4]);
     }
 
-    packetRGBChannel[offsetRed]   = driver->redMap[red];
-    packetRGBChannel[offsetGreen] = driver->greenMap[green];
-    packetRGBChannel[offsetBlue]  = driver->blueMap[blue];
+    packetRGBChannel[offsetRed]   = safeLutLookup(driver->redMap, red);
+    packetRGBChannel[offsetGreen] = safeLutLookup(driver->greenMap, green);
+    packetRGBChannel[offsetBlue]  = safeLutLookup(driver->blueMap, blue);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +351,7 @@ static const parlio_transmit_config_t transmit_config = {
 // Repacked waveform buffer — large enough for 1024 LEDs × 5 channels × 16-bit width
 static const uint32_t REPACKED_BUFFER_BYTES = 1024u * 5u * 32u * 16u / 8u;  // 327,680 bytes
 
-uint8_t IRAM_ATTR __attribute__((hot)) show_parlio_p4(
+uint8_t __attribute__((hot)) show_parlio_p4(
         I2SClocklessLedDriver* driver,
         uint8_t*  parallelPins,
         uint32_t  length,
@@ -343,6 +361,11 @@ uint8_t IRAM_ATTR __attribute__((hot)) show_parlio_p4(
         uint16_t* leds_per_output,
         uint8_t   offsetR, uint8_t offsetG, uint8_t offsetB,
         uint8_t   offsetW, uint8_t offsetW2) {
+
+    #if !HAS_PARLIO_DRIVER
+    ESP_LOGE(TAG, "PARLIO driver not available - ESP-IDF v5.1+ required for ESP32-P4 support");
+    return 1;
+    #endif
 
     if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
         outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
