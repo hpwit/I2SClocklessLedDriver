@@ -61,7 +61,7 @@ If all the strips of the first example are of the same size, then the 2 examples
 Here is how we would declare the 4 strips in of our example:
 ```C
 CRGB leds[4*NUM_LED_PER_STRIPS];
-int pins[4]={PIN1,PIN2,PIN3,PIN4};
+uint8_t pins[4]={PIN1,PIN2,PIN3,PIN4};
 driver.initled((uint8_t*)leds,pins,4,NUM_LED_PER_STRIPS,ORDER_GRB);
 ```
 We are declaring that my `leds` array represent 4 strips of `NUM_LED_PER_STRIPS` leds ,each strip being linked to the pins defined in the pins array `pins`. This is way easier to declare a lot of strips. 
@@ -72,8 +72,8 @@ We are declaring that my `leds` array represent 4 strips of `NUM_LED_PER_STRIPS`
 #define LENGTH1 200
 #define LENGTH2 300
 #define LENGTH3 100
-int pins[3]={0,2,4};
-int lengths[3]={LENGTH1,LENGTH2,LENGTH3};
+uint8_t pins[3]={0,2,4};
+uint16_t lengths[3]={LENGTH1,LENGTH2,LENGTH3};
 CRGB leds[LENGTH1 + LENGTH2 + LENGTH3];
 
 driver.initled((uint8_t*)leds,pins,lengths,3,ORDER_GRB);
@@ -132,9 +132,9 @@ uint8_t leds[4*NUM_LEDS];
 
  I2SClocklessLedDriver driver;
  
- uint8_t leds[3*NUM_STRIPS*NUM_LEDS_PER_STRIP]; //equivalent of CRGB leds[NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]
- int pins[NUM_STRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
- driver.initled((uint8_t*)leds,pins,NUM_STRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
+ uint8_t leds[3*NUMSTRIPS*NUM_LEDS_PER_STRIP]; //equivalent of CRGB leds[NUM_LEDS_PER_STRIPS*NUM_LEDS_PER_STRIPS]
+ uint8_t pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+ driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
  ```
  
  example 5: declaring 12 strips of 256 leds in RGBW
@@ -147,7 +147,7 @@ uint8_t leds[4*NUM_LEDS];
  I2SClocklessLedDriver driver;
  
  uint8_t leds[4*NUMSTRIPS*NUM_LED_PER_STRIP]; 
- int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+ uint8_t pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
  driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
  ```
 
@@ -183,9 +183,9 @@ If you want to use the pixelslib library features [https://github.com/hpwit/Pixe
 
 I2SClocklessLedDriver driver;
 
-int lengths[4]={SIZE_STRIP1,SIZE_STRIP2,SIZE_STRIP3,SIZE_STRIP4};
+uint16_t lengths[4]={SIZE_STRIP1,SIZE_STRIP2,SIZE_STRIP3,SIZE_STRIP4};
 Pixels leds=Pixels(lengths,4);
-int pins[NUMSTRIPS] ={0,2,4,5};
+uint8_t pins[NUMSTRIPS] ={0,2,4,5};
 driver.initled(leds,pins);
 
 
@@ -234,7 +234,7 @@ It can also be used to ease dithering see example `Dithering` (I need to work on
 uint8_t leds1[NUM_LEDS*3];
 uint8_t leds2[NUM_LEDS*3];
 
-int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+uint8_t pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
 driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRB);
 
 //displyaing the leds in leds1
@@ -382,7 +382,7 @@ Normally to speed up things, you may program your animation on one core and disp
 I2SClocklessLedDriver driver;
 
 uint8_t leds[4*NUMSTRIPS*NUM_LED_PER_STRIP]; 
-int pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
+uint8_t pins[NUMSTRIPS] ={0,2,4,5,12,13,14,15,16,29,25,26};
 driver.initled((uint8_t*)leds,pins,NUMSTRIPS,NUM_LED_PER_STRIP,ORDER_GRBW);
 
 ```

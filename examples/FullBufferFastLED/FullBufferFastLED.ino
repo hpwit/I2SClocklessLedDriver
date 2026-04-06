@@ -8,7 +8,7 @@
 //this one below is same as the one above
 CRGB leds[NUMSTRIPS*NUM_LEDS_PER_STRIP];
 
-int pins[16]={0,2,4,5,12,13,14,15,16,18,19,21,22,23,25,26};
+uint8_t pins[16]={0,2,4,5,12,13,14,15,16,18,19,21,22,23,25,26};
 
 I2SClocklessLedDriver driver;
 void setup() {

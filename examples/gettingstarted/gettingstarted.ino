@@ -1,10 +1,14 @@
 #include "I2SClocklessLedDriver.h"
 #define NUM_LEDS_PER_STRIP 256
-#define NUMSTRIPS 16
+#define NUMSTRIPS 6
 //here we have 3 colors per pixel
 uint8_t leds[NUMSTRIPS*NUM_LEDS_PER_STRIP*3];
 
-int pins[16]={0,2,4,5,12,13,14,15,16,18,19,21,22,23,25,26};
+#ifdef CONFIG_IDF_TARGET_ESP32S3
+uint8_t pins[6] = {9, 10,12,8,18,17};
+#else
+uint8_t pins[6] = {14, 12, 13, 25, 33, 32};
+#endif
 
 I2SClocklessLedDriver driver;
 void setup() {

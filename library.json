@@ -11,6 +11,13 @@
   "version": "1.0.0",
   "frameworks": "arduino",
   "platforms": "*",
+  "build": {
+        "srcFilter": [
+            "+<*>",
+            "-<main.cpp>",
+            "-<examples/>"
+        ]
+    },
   "headers": "I2SClocklessLedDriver.h"
 }
 

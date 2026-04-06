@@ -1,0 +1,49 @@
+site_name: I2SClocklessLedDriver
+site_description: ESP32 I2S/DMA parallel LED strip driver for WS2812/SK6812
+site_url: https://hpwit.github.io/I2SClocklessLedDriver
+repo_url: https://github.com/hpwit/I2SClocklessLedDriver
+repo_name: hpwit/I2SClocklessLedDriver
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: cyan
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - toc.integrate
+
+nav:
+  - Home: index.md
+  - End User Guide:
+      - Getting Started: enduser/enduser.md
+  - Developer Guide:
+      - Architecture & Internals: developer/developer.md
+      - Standards & Guidelines: developer/standardsandguidelines.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - toc:
+      permalink: true
+
+plugins:
+  - search

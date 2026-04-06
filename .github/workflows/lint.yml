@@ -1,0 +1,70 @@
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  cppcheck:
+    name: cppcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,portability \
+            --error-exitcode=1 \
+            --suppressions-list=.cppcheck-suppressions \
+            --inline-suppr \
+            -I src \
+            --platform=unix32 \
+            --std=c++17 \
+            --language=c++ \
+            -D ESP_IDF_VERSION=0x050500 \
+            "-D ESP_IDF_VERSION_VAL(a,b,c)=((a<<16)|(b<<8)|c)" \
+            src/
+
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-tidy
+        run: sudo apt-get install -y clang-tidy python3
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Generate compile_commands.json
+        run: pio run -e esp32-s3-devkitc-1 --target compiledb
+
+      - name: Patch compile DB for clang-tidy
+        run: CLANG=clang++ python3 tools/patch_compile_db.py compile_commands.json .lint_db
+
+      - name: Run clang-tidy
+        run: |
+          # Cross-compilation framework headers (xtensa, newlib, RISC-V) cause fatal
+          # errors on host clang; we only fail if check violations appear in our src/.
+          output=$(clang-tidy \
+            -p .lint_db \
+            --header-filter="$(pwd)/src/.*" \
+            "$(pwd)/src/I2SClocklessLedDriver.cpp" \
+            "$(pwd)/src/HardwareSprite.cpp" \
+            2>&1) || true
+          echo "$output"
+          if echo "$output" | grep -qE "^$(pwd)/src/.*\[[a-z].*\]$"; then
+            echo "clang-tidy found violations in project source files."
+            exit 1
+          fi
