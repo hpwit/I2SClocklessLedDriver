@@ -22,8 +22,8 @@ You can simply update your own branch, and push changes in response to reviewer 
 GitHub will pick up the changes so your PR stays up-to-date.
 
 !!! warning "Do not use force-push while your PR is open!"
-    * It has many subtle and unexpected consequences on our GitHub repository.
-    * For example, we regularly lost review comments when the PR author force-pushes code changes. So, pretty please, do not force-push.
+    - It has many subtle and unexpected consequences on our GitHub repository.
+    - For example, we regularly lost review comments when the PR author force-pushes code changes.
 
 You can find a collection of useful tips and tricks in GitHub's documentation: [Creating a pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request)
 

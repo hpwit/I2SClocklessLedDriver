@@ -10,7 +10,7 @@
 /* library options
  *  IDF5.5 check will be used to track recent changes which work in IDF 5.5, maybe / probably also before but this ensures we do not break things on older versions
  *  <IDF5.5: NUMSTRIPS add this before the #include of the library this will help with the speed of the buffer calculation
- *  >=IDF5.5: gNumStrips is a global variable (note the _ !), set in initled and update if number of strips change
+ *  numStrips is a class member of I2SClocklessLedDriver, set in initled and updated when strip count changes
  *
  *  ENABLE_HARDWARE_SCROLL : to enable the HARDWARE SCROLL. Attention wjhen enabled you can use the offset  but it could mean slow when using all the pins
  *  USE_PIXELSLIB : to use tthe pixel lib library automatic functions
@@ -213,7 +213,7 @@ static bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event_data_t* e
 static void interruptHandler(void* arg);
 #endif
 
-static void transpose16x1Noinline2(unsigned char* a, uint16_t* b);
+static void transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint8_t numStrips);
 
 /*
 #ifdef ENABLE_HARDWARE_SCROLL
@@ -270,8 +270,6 @@ struct LedTiming {
   uint8_t f3;
 };
 
-extern uint8_t gNbDmaBuffer;
-extern uint8_t gNumStrips;
 
 /**
  * I2SClocklessLedDriver — parallel LED strip driver for ESP32 / ESP32-S3.
@@ -327,7 +325,7 @@ class I2SClocklessLedDriver {
   // volatile int oo=0;
   uint8_t *leds = nullptr, *saveleds = nullptr;
   uint16_t linewidth = 0;
-  // uint8_t dmaBufferCount = gNbDmaBuffer;  // we use two buffers
+  uint8_t nbDmaBuffer = 6;
   volatile bool transpose = false;
 
   volatile uint8_t numStrips = 0;
@@ -628,18 +626,18 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 */
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-  dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(gNbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+  dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
 #elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
-  dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(gNbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
+  dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-    for (int i = 0; i < gNbDmaBuffer + 1; i++) {
+    for (int i = 0; i < nbDmaBuffer + 1; i++) {
       dmaBuffersTampon[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
     }
-    dmaBuffersTampon[gNbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+    dmaBuffersTampon[nbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
 
-    for (int i = 0; i < gNbDmaBuffer; i++) {
+    for (int i = 0; i < nbDmaBuffer; i++) {
       putdefaultones((uint16_t*)dmaBuffersTampon[i]->buffer);
     }
 #endif
@@ -1074,36 +1072,36 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     ledToDisplay = 0;
     transpose = true;
 #ifdef CONFIG_IDF_TARGET_ESP32
-    for (int buffNum = 0; buffNum < gNbDmaBuffer - 1; buffNum++) {
+    for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
       dmaBuffersTampon[buffNum]->descriptor.qe.stqe_next = &(dmaBuffersTampon[buffNum + 1]->descriptor);
     }
 
-    dmaBuffersTampon[gNbDmaBuffer - 1]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
-    dmaBuffersTampon[gNbDmaBuffer]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
-    dmaBuffersTampon[gNbDmaBuffer + 1]->descriptor.qe.stqe_next = 0;
+    dmaBuffersTampon[nbDmaBuffer - 1]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
+    dmaBuffersTampon[nbDmaBuffer]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
+    dmaBuffersTampon[nbDmaBuffer + 1]->descriptor.qe.stqe_next = 0;
 
 #elif CONFIG_IDF_TARGET_ESP32S3
-    for (int buffNum = 0; buffNum < gNbDmaBuffer - 1; buffNum++) {
+    for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
       dmaBuffersTampon[buffNum]->next = dmaBuffersTampon[buffNum + 1];
     }
-    dmaBuffersTampon[gNbDmaBuffer - 1]->next = dmaBuffersTampon[0];
-    dmaBuffersTampon[gNbDmaBuffer]->next = dmaBuffersTampon[0];
-    dmaBuffersTampon[gNbDmaBuffer + 1]->next = dmaBuffersTampon[gNbDmaBuffer + 1];
+    dmaBuffersTampon[nbDmaBuffer - 1]->next = dmaBuffersTampon[0];
+    dmaBuffersTampon[nbDmaBuffer]->next = dmaBuffersTampon[0];
+    dmaBuffersTampon[nbDmaBuffer + 1]->next = dmaBuffersTampon[nbDmaBuffer + 1];
 #endif
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
 
     ledToDisplay = 0;
     dmaBufferActive = 0;
-    for (int numBuff = 0; numBuff < gNbDmaBuffer - 1; numBuff++) {
+    for (int numBuff = 0; numBuff < nbDmaBuffer - 1; numBuff++) {
       loadAndTranspose(this);
       dmaBufferActive = dmaBufferActive + 1;
       ledToDisplay = ledToDisplay + 1;
     }
     ledToDisplay = ledToDisplay - 1;
-    dmaBufferActive = gNbDmaBuffer - 1;
+    dmaBufferActive = nbDmaBuffer - 1;
     ledToDisplayOut = 0;
     isDisplaying = true;
-    i2sStart(dmaBuffersTampon[gNbDmaBuffer]);
+    i2sStart(dmaBuffersTampon[nbDmaBuffer]);
 
     if (displayMode == WAIT) {
       isWaiting = true;
@@ -1293,7 +1291,6 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 #endif
   }
 
-  void setGlobalNumStrips() { gNumStrips = numStrips; }
   void setShowDelay() { showDelay = (((numLedPerStrip * 125 * 8 * nbComponents) / 100000) + 1); }
 
   void initLedImpl(uint8_t* leds, uint8_t* pinsq, uint8_t numStrips, uint16_t numLedPerStrip) {
@@ -1314,7 +1311,6 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     this->numStrips = numStrips;
     // this->dmaBufferCount = dmaBufferCount;//this doesn't make sense as it is no parameter
 
-    setGlobalNumStrips();
     setShowDelay();
 
     ESP_LOGV(TAG, "xdelay:%d", showDelay);
@@ -1628,16 +1624,16 @@ static IRAM_ATTR bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event
     if (cont->ledToDisplay < cont->numLedPerStrip) {
       loadAndTranspose(cont);
 
-      if (cont->ledToDisplayOut == (cont->numLedPerStrip - gNbDmaBuffer))  // here it's not -1 because it takes time top have the change into account and it reread the buufer
+      if (cont->ledToDisplayOut == (cont->numLedPerStrip - cont->nbDmaBuffer))  // here it's not -1 because it takes time top have the change into account and it reread the buufer
       {
-        cont->dmaBuffersTampon[(cont->dmaBufferActive) % gNbDmaBuffer]->next = (cont->dmaBuffersTampon[gNbDmaBuffer + 1]);
+        cont->dmaBuffersTampon[(cont->dmaBufferActive) % cont->nbDmaBuffer]->next = (cont->dmaBuffersTampon[cont->nbDmaBuffer + 1]);
         // cont->ledToDisplay_inbufferfor[cont->ledToDisplayOut]=cont->dmaBufferActive;
       }
 
-      cont->dmaBufferActive = (cont->dmaBufferActive + 1) % gNbDmaBuffer;
+      cont->dmaBufferActive = (cont->dmaBufferActive + 1) % cont->nbDmaBuffer;
     }
     cont->ledToDisplayOut = cont->ledToDisplayOut + 1;
-    if (cont->ledToDisplay >= cont->numLedPerStrip + gNbDmaBuffer + 1) {
+    if (cont->ledToDisplay >= cont->numLedPerStrip + cont->nbDmaBuffer + 1) {
       i2sStop(cont);
     }
   } else {
@@ -1671,11 +1667,11 @@ static void IRAM_ATTR interruptHandler(void* arg) {
       if (cont->ledToDisplay < cont->numLedPerStrip) {
         loadAndTranspose(cont);
 
-        if (cont->ledToDisplayOut == cont->numLedPerStrip - gNbDmaBuffer)  // here it's not -1 because it takes time top have the change into account and it reread the buufer
+        if (cont->ledToDisplayOut == cont->numLedPerStrip - cont->nbDmaBuffer)  // here it's not -1 because it takes time top have the change into account and it reread the buufer
         {
-          cont->dmaBuffersTampon[(cont->dmaBufferActive) % gNbDmaBuffer]->descriptor.qe.stqe_next = &(cont->dmaBuffersTampon[gNbDmaBuffer + 1]->descriptor);
+          cont->dmaBuffersTampon[(cont->dmaBufferActive) % cont->nbDmaBuffer]->descriptor.qe.stqe_next = &(cont->dmaBuffersTampon[cont->nbDmaBuffer + 1]->descriptor);
         }
-        cont->dmaBufferActive = (cont->dmaBufferActive + 1) % gNbDmaBuffer;
+        cont->dmaBufferActive = (cont->dmaBufferActive + 1) % cont->nbDmaBuffer;
       }
       cont->ledToDisplayOut = cont->ledToDisplayOut + 1;  //++ gives volatile warning
     } else {
@@ -1700,12 +1696,12 @@ static void IRAM_ATTR interruptHandler(void* arg) {
   #endif
 }
 #endif
-static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b) {
+static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint8_t numStrips) {
   uint32_t x, y, x1, y1, t;
 
   y = *reinterpret_cast<const unsigned int*>(a);
 
-  if (gNumStrips > 4) {
+  if (numStrips > 4) {
     x = *reinterpret_cast<const unsigned int*>(a + 4);
 
     // pre-transform x
@@ -1716,12 +1712,12 @@ static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b) {
   } else
     x = 0;
 
-  if (gNumStrips > 8)
+  if (numStrips > 8)
     y1 = *reinterpret_cast<const unsigned int*>(a + 8);
   else
     y1 = 0;
 
-  if (gNumStrips > 12) {
+  if (numStrips > 12) {
     // pre-transform x
     x1 = *reinterpret_cast<const unsigned int*>(a + 12);
     t = (x1 ^ (x1 >> 7)) & AAA;
@@ -1737,7 +1733,7 @@ static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b) {
   t = (y ^ (y >> 14)) & CC;
   y = y ^ t ^ (t << 14);
 
-  if (gNumStrips > 8) {
+  if (numStrips > 8) {
     t = (y1 ^ (y1 >> 7)) & AAA;
     y1 = y1 ^ t ^ (t << 7);
     t = (y1 ^ (y1 >> 14)) & CC;
@@ -1854,11 +1850,11 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
 #endif
   }
 
-  transpose16x1Noinline2(secondPixel[0].bytes, (uint16_t*)buffer);
-  transpose16x1Noinline2(secondPixel[1].bytes, (uint16_t*)buffer + 3 * 8);
-  transpose16x1Noinline2(secondPixel[2].bytes, (uint16_t*)buffer + 2 * 3 * 8);
-  if (driver->pW != UINT8_MAX) transpose16x1Noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8);
-  if (driver->pW2 != UINT8_MAX) transpose16x1Noinline2(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8);
+  transpose16x1Noinline2(secondPixel[0].bytes, (uint16_t*)buffer, driver->numStrips);
+  transpose16x1Noinline2(secondPixel[1].bytes, (uint16_t*)buffer + 3 * 8, driver->numStrips);
+  transpose16x1Noinline2(secondPixel[2].bytes, (uint16_t*)buffer + 2 * 3 * 8, driver->numStrips);
+  if (driver->pW != UINT8_MAX) transpose16x1Noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8, driver->numStrips);
+  if (driver->pW2 != UINT8_MAX) transpose16x1Noinline2(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8, driver->numStrips);
 }
 
 #endif

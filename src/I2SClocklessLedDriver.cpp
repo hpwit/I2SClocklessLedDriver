@@ -11,9 +11,6 @@
 
 #include "I2SClocklessLedDriver.h"
 
-uint8_t gNbDmaBuffer = 6;
-uint8_t gNumStrips = 16;
-
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 clock_speed clock1123Khz = {4, 20, 9};
 clock_speed clock1111Khz = {4, 2, 1};
@@ -54,7 +51,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
     wasWaitingtofinish = false;
   }
 
-  deleteDriver();  // uses old numLedPerStrip and gNbDmaBuffer as loop bounds
+  deleteDriver();  // uses old numLedPerStrip and nbDmaBuffer as loop bounds
 
   // Now safe to apply all new geometry and configuration.
   this->numStrips = numStrips;
@@ -72,10 +69,9 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   linewidth = newNumLedPerStrip;
 
   setShowDelay();
-  setGlobalNumStrips();
   setPins(pinsq);
 
-  gNbDmaBuffer = dmaBuffer;
+  nbDmaBuffer = dmaBuffer;
 
   this->nbComponents = nbComponents;
   this->pR = pR;
@@ -88,7 +84,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 
   setBrightness(brightness);  // allocate/free gamma maps based on new pW
 
-  ESP_LOGD(TAG, "updateLeds %d x %d (%d)", numStrips, numLedPerStrip, gNbDmaBuffer);
+  ESP_LOGD(TAG, "updateLeds %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
 }
 
 /** deleteDriver — frees all DMA buffers and the waitDisp semaphore.  Safe to call
@@ -96,7 +92,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 void I2SClocklessLedDriver::deleteDriver() {
   #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 for PhysicalDriver not supported yet
   if (dmaBuffersTampon) {
-    for (int i = 0; i < gNbDmaBuffer + 2; i++) {
+    for (int i = 0; i < nbDmaBuffer + 2; i++) {
       if (dmaBuffersTampon[i]) {
         if (dmaBuffersTampon[i]->buffer) heap_caps_free(dmaBuffersTampon[i]->buffer);
         heap_caps_free(dmaBuffersTampon[i]);
