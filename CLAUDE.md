@@ -61,7 +61,7 @@ Two modes:
 
 - `CONFIG_IDF_TARGET_ESP32S3` — uses LCD_CAM peripheral + GDMA. Main ISR path.
 - `CONFIG_IDF_TARGET_ESP32` — uses I2S0 peripheral + `esp_intr_alloc`. Different register layout.
-- `CONFIG_IDF_TARGET_ESP32P4` — referenced in platformio.ini but physical driver not yet implemented (only virtual driver path).
+- `CONFIG_IDF_TARGET_ESP32P4` — uses **PARLIO TX** peripheral (`src/parlio_p4.h/.cpp`). No I2S/DMA; the PARLIO unit is configured lazily on the first `showPixels()` call. `initled()` and `showPixels(WAIT)` are the supported entry points; `FULL_DMA_BUFFER`/`LOOP` modes are not available.
 
 ### Semaphores
 

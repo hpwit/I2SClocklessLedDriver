@@ -6,6 +6,8 @@
 |------|---------|
 | `src/I2SClocklessLedDriver.h` | Full driver class + all static ISR/transpose functions |
 | `src/I2SClocklessLedDriver.cpp` | `updateDriver()` / `deleteDriver()` implementations |
+| `src/parlio_p4.h` | ESP32-P4 PARLIO driver — declaration (included by the main header under `CONFIG_IDF_TARGET_ESP32P4`) |
+| `src/parlio_p4.cpp` | ESP32-P4 PARLIO driver — implementation (bit-transposition, DMA chunking, LUT mapping) |
 | `src/pixeltypes.h` | `Pixel` struct and `Pixels` container (used when `USE_PIXELSLIB` is not set) |
 | `src/framebuffer.h` | Simple double-buffer helper |
 | `src/HardwareSprite.h/.cpp` | Hardware sprite overlay (opt-in with `HARDWARESPRITES 1`) |
@@ -42,7 +44,51 @@ All hardware-specific code is guarded by the target defines injected by Platform
 |--------|----------------|
 | `CONFIG_IDF_TARGET_ESP32S3` | LCD_CAM + GDMA (`gdma_new_ahb_channel`) |
 | `CONFIG_IDF_TARGET_ESP32` | I2S0 + `esp_intr_alloc` |
-| `CONFIG_IDF_TARGET_ESP32P4` | AXI GDMA (virtual driver path only, physical not yet implemented) |
+| `CONFIG_IDF_TARGET_ESP32P4` | PARLIO TX (`parlio_tx_unit`) — see [ESP32-P4 PARLIO driver](#esp32-p4-parlio-driver) |
+
+---
+
+## ESP32-P4 PARLIO driver
+
+The ESP32-P4 does not have an I2S peripheral, so the parallel LED output is driven by the **PARLIO TX** (Parallel IO) hardware unit.  The implementation lives in `src/parlio_p4.h` / `src/parlio_p4.cpp` and is called transparently from the same `initled()` + `showPixels()` API.
+
+### How it works
+
+Instead of filling a DMA descriptor ring (ESP32/S3 approach), the P4 driver:
+
+1. **Transposes** the raw `leds[]` byte buffer into a packed waveform buffer (`parallel_buffer_repacked`), applying brightness/gamma LUT tables for every channel in the same pass.
+2. **Encodes** each LED bit as 4 clock cycles (`1000` = 0-bit, `1110` = 1-bit at 800 kHz × 4 = 3.2 MHz clock).  Both nibbles of a byte are looked up simultaneously via a 256-entry `waveform_cache[]`.
+3. **Packs** the per-pin bits into the PARLIO data width (1/2/4/8/16-bit) using optimised `process_Nbit()` helpers in the `LedMatrixDetail` namespace.
+4. **Chunks** the output into ≤65535-byte transfers to respect the PARLIO DMA hardware limit, queuing up to 4 chunks per frame.
+5. **Ping-pongs** between two waveform buffers so the CPU can build the next frame while the PARLIO unit streams the current one.
+
+### Variable strip lengths (padding — feature by @ewowi)
+
+When strips have different lengths (`leds_per_output[]`), the transposition loop runs for `max_leds_per_output` positions.  Pins whose strip is shorter than the maximum are **zero-padded** — they output black (`0x00`) for the extra positions instead of transmitting stale data.
+
+`first_index_per_output[]` tracks the byte-offset of each strip's first pixel in the flat `leds[]` buffer.
+
+### RGBCCT warm-white support (feature by @ewowi)
+
+A fifth colour channel (`offsetW2` / `pW2`) is supported for RGBCCT strips.  The warm-white channel uses the `white2Map` LUT (separate brightness/gamma curve from the cool-white `whiteMap`).
+
+> **Bug fixed vs original parlio.cpp**: the original code applied `whiteMap` (cool-white LUT) to the warm-white channel; `parlio_p4.cpp` correctly uses `white2Map`.
+
+### Attribution
+
+The PARLIO approach was originally developed by **@troyhacks** and extended with variable-length padding and RGBCCT support by **@ewowi** in the [MoonModules/MoonLight](https://github.com/MoonModules/MoonLight) project.  It was adapted for standalone use (no MoonLight dependencies, explicit driver pointer instead of `extern ledsDriver`) and integrated into I2SClocklessLedDriver by **@ewowi**.
+
+### `initLedImpl()` on P4
+
+On ESP32-P4, `initLedImpl()` stores the pin numbers in `p4Pins[]` and calls `setBrightness()` to initialise the LUT tables, then returns immediately — no I2S peripheral or DMA buffer allocation takes place.  The PARLIO unit is created lazily on the first `showPixels()` call.
+
+### `updateDriver()` on P4
+
+There is no DMA transfer to quiesce.  `updateDriver()` updates the pin array, strip sizes, colour order, and brightness LUTs, then returns.  The PARLIO unit detects the topology change on the next `showPixels()` call and reconfigures.
+
+### `deleteDriver()` on P4
+
+No I2S/DMA buffers were allocated, so nothing is freed.  The PARLIO unit itself (and its dual waveform buffers) is managed by `parlio_p4.cpp` as static state.
 
 ---
 
@@ -89,10 +135,8 @@ In `LOOP` mode, `dmaBuffersTransposed[N+1]->next` points back to `dmaBuffersTran
 ## Adding a new target
 
 1. Add a `[env:your-target]` section in `platformio.ini` with the matching `CONFIG_IDF_TARGET_*` build flag.
-2. Add an `i2sInit()` branch in `I2SClocklessLedDriver.h` guarded by the new target define, initialising the appropriate DMA peripheral.
-3. Add an ISR handler function for the new peripheral.
-4. Add an `i2sStart()` branch to kick off the DMA transfer.
-5. If the target uses a different GDMA variant (e.g., AXI GDMA on P4), add a matching `gdma_new_axi_channel` call in the `>= 5.5.0` branch.
+2. If the new target uses I2S/DMA: add an `i2sInit()` branch guarded by the new define, an ISR handler, and an `i2sStart()` branch — following the ESP32 or S3 pattern.
+3. If the new target uses a different peripheral (like PARLIO on P4): create `src/parlio_<target>.h/.cpp`, declare the show function, include the header in the P4/top of `I2SClocklessLedDriver.h`, and add `#elif CONFIG_IDF_TARGET_<NEW>` branches in `setPins()`, `initLedImpl()`, and `showPixelsImpl()`.
 
 ---
 

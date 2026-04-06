@@ -23,14 +23,24 @@
 
 #include "freertos/FreeRTOS.h"  // #error "include FreeRTOS.h" must appear in source files before "include semphr.h"
 
-// IDF5.5: replace #include driver by #include esp_private
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-  #include <esp_private/gpio.h>
-  #include <esp_private/periph_ctrl.h>
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+  // ESP32-P4 uses the PARLIO peripheral — no I2S/DMA headers needed.
+  #include "esp_log.h"
+  #include "esp_rom_sys.h"
+  #include "freertos/semphr.h"
+  #include "freertos/task.h"
+  #include "esp_heap_caps.h"
+  #include "parlio_p4.h"
 #else
-  #include <driver/periph_ctrl.h>
-  #include "driver/gpio.h"
-#endif
+// IDF5.5: replace #include driver by #include esp_private
+  #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
+    #include <esp_private/gpio.h>
+    #include <esp_private/periph_ctrl.h>
+  #else
+    #include <driver/periph_ctrl.h>
+    #include "driver/gpio.h"
+  #endif
+#endif  // CONFIG_IDF_TARGET_ESP32P4
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 
@@ -341,6 +351,34 @@ class I2SClocklessLedDriver {
 
   TickType_t showDelay = 0;
 
+  // GPIO pin numbers stored for the lifetime of the driver.
+  // For ESP32/S3 the GPIO mux is configured once in setPins() and the hardware remembers it,
+  // but storing the array here makes the driver self-contained and supports future use.
+  // For P4 the pin array is also passed to the PARLIO unit on each topology change.
+  uint8_t pins[MAX_PINS] = {};
+
+  // Cumulative LED offset for each strip: firstIndexPerOutput[i] = sum of stripSize[0..i-1].
+  // Populated by initLedImpl() and updateDriver().  Used by the P4 PARLIO transposition pass
+  // to locate each strip's data in the flat leds[] buffer without per-LED pointer arithmetic.
+  uint32_t firstIndexPerOutput[MAX_PINS] = {};
+
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+
+  // PARLIO peripheral handle and configuration.
+  parlio_tx_unit_handle_t p4TxUnit  = NULL;
+  parlio_tx_unit_config_t p4Config  = {};
+
+  // Topology-change detection: force PARLIO reconfiguration when these differ.
+  bool p4SetupDone        = false;
+  int  p4LastOutputs      = -1;
+  int  p4LastLedsPerOutput = -1;
+
+  // Ping-pong waveform buffers — allocated in initLedImpl(), freed in deleteDriver().
+  uint16_t* p4Buffer1      = nullptr;
+  uint16_t* p4Buffer2      = nullptr;
+  uint16_t* p4BufferActive = nullptr;
+#endif
+
 #ifdef __HARDWARE_MAP
   uint32_t* hmap;
   volatile uint32_t* hmapOff;
@@ -393,27 +431,30 @@ class I2SClocklessLedDriver {
     }
   }
 
-  void setPins(uint8_t* pins) {
-#ifdef CONFIG_IDF_TARGET_ESP32
+  void setPins(uint8_t* pinsq) {
+    for (int i = 0; i < numStrips && i < MAX_PINS; i++) this->pins[i] = pinsq[i];
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    // P4: pin numbers stored above; the PARLIO peripheral configures GPIO routing itself.
+#elif CONFIG_IDF_TARGET_ESP32
     for (int i = 0; i < numStrips; i++) {
-      PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pins[i]], PIN_FUNC_GPIO);
-      gpio_set_direction((gpio_num_t)pins[i], (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
-      gpio_matrix_out(pins[i], deviceBaseIndex[I2S_DEVICE] + i + 8, false, false);
+      PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pinsq[i]], PIN_FUNC_GPIO);
+      gpio_set_direction((gpio_num_t)pinsq[i], (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
+      gpio_matrix_out(pinsq[i], deviceBaseIndex[I2S_DEVICE] + i + 8, false, false);
     }
 #elif CONFIG_IDF_TARGET_ESP32S3
     for (int i = 0; i < numStrips; i++) {
-      esp_rom_gpio_connect_out_signal(pins[i], signalsID[i], false, false);
-        // gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[pins[i]], PIN_FUNC_GPIO);
-        // gpio_hal_func_sel(GPIO_PIN_MUX_REG[pins[i]], PIN_FUNC_GPIO);
+      esp_rom_gpio_connect_out_signal(pinsq[i], signalsID[i], false, false);
+        // gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[pinsq[i]], PIN_FUNC_GPIO);
+        // gpio_hal_func_sel(GPIO_PIN_MUX_REG[pinsq[i]], PIN_FUNC_GPIO);
 
   // IDF5.5: 🌙 setPins: use gpio_iomux_output instead of gpio_iomux_out suppress warning, ready for idf 6, see https://github.com/espressif/esp-idf/issues/17052
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-      gpio_iomux_output((gpio_num_t)pins[i], PIN_FUNC_GPIO);
+      gpio_iomux_output((gpio_num_t)pinsq[i], PIN_FUNC_GPIO);
   #else
-      gpio_iomux_out(pins[i], PIN_FUNC_GPIO, false);
+      gpio_iomux_out(pinsq[i], PIN_FUNC_GPIO, false);
   #endif
 
-      gpio_set_drive_capability((gpio_num_t)pins[i], GPIO_DRIVE_CAP_3);
+      gpio_set_drive_capability((gpio_num_t)pinsq[i], GPIO_DRIVE_CAP_3);
     }
 #endif
   }
@@ -1051,10 +1092,28 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     showPixelsImpl();
   }
 
+  /** Convenience alias for showPixels() — blocking frame push on all platforms. */
+  void show() { showPixels(); }
+
   void showPixelsImpl() {
     if (!enableDriver) {
       return;
     }
+
+    if (leds == NULL) {
+      ESP_LOGE(TAG, "no leds buffer defined");
+      return;
+    }
+
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    // P4: PARLIO driver is fully synchronous — it blocks until the frame is transmitted.
+    // Reset isDisplaying here (no ISR will do it) so the next showPixels() call doesn't block.
+    show_parlio_p4(this, pins, totalLeds, leds, nbComponents,
+                   numStrips, stripSize, pR, pG, pB, pW, pW2);
+    isDisplaying = false;
+    return;
+#endif
+
 #ifdef __HARDWARE_MAP
     hmapOff = hmap;
 
@@ -1064,10 +1123,6 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
 #endif
 
-    if (leds == NULL) {
-      ESP_LOGE(TAG, "no leds buffer defined");
-      return;
-    }
     ledToDisplay = 0;
     transpose = true;
 #ifdef CONFIG_IDF_TARGET_ESP32
@@ -1310,6 +1365,12 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     this->numStrips = numStrips;
     // this->dmaBufferCount = dmaBufferCount;//this doesn't make sense as it is no parameter
 
+    // Precompute cumulative strip offsets (used by PARLIO P4 transposition; available for all targets).
+    firstIndexPerOutput[0] = 0;
+    for (int i = 1; i < numStrips; i++) {
+      firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + stripSize[i - 1];
+    }
+
     setShowDelay();
 
     ESP_LOGV(TAG, "xdelay:%d", showDelay);
@@ -1362,6 +1423,26 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     #endif
     */
 
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+    // P4: store GPIO pins; allocate ping-pong waveform buffers; reset setup state so the
+    // PARLIO unit is reconfigured on the next showPixels() call.
+    setPins(pinsq);
+
+    static const uint32_t P4_BUF_BYTES = 1024u * 5u * 32u * 16u / 8u;  // 327,680 bytes
+    if (!p4Buffer1)
+      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(P4_BUF_BYTES, 1, 2,
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+    if (!p4Buffer2)
+      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(P4_BUF_BYTES, 1, 2,
+          MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+    p4BufferActive = p4Buffer1;
+
+    // Force PARLIO reconfiguration on the next showPixels().
+    p4SetupDone         = false;
+    p4LastOutputs       = -1;
+    p4LastLedsPerOutput = -1;
+    return;
+#endif
     setPins(pinsq);
     i2sInit();
     initDMABuffers();

@@ -30,6 +30,33 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
     return;
   }
 
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+  // P4: no DMA in flight to quiesce.  Update state; the PARLIO unit reconfigures
+  // lazily on the next showPixels() call when it detects the topology change.
+  this->numStrips = numStrips;
+  totalLeds = 0;
+  firstIndexPerOutput[0] = 0;
+  for (int i = 0; i < numStrips; i++) {
+    stripSize[i]  = sizes[i];
+    totalLeds    += sizes[i];
+    pins[i]       = pinsq[i];
+    if (i > 0) firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + sizes[i - 1];
+  }
+  this->numLedPerStrip = maxLength(sizes, numStrips);
+  offsetDisplay.offsetx    = 0;
+  offsetDisplay.offsety    = 0;
+  offsetDisplay.panelWidth = this->numLedPerStrip;
+  offsetDisplay.panelHeight = 9999;
+  defaultOffsetDisplay = offsetDisplay;
+  linewidth     = this->numLedPerStrip;
+  nbDmaBuffer   = dmaBuffer;
+  this->nbComponents = nbComponents;
+  this->pR = pR;  this->pG = pG;  this->pB = pB;  this->pW = pW;  this->pW2 = pW2;
+  setBrightness(brightness);
+  ESP_LOGD(TAG, "updateDriver (P4) %d x %d", numStrips, this->numLedPerStrip);
+  return;
+#endif
+
   // Compute new geometry locally so deleteDriver() still sees the old
   // this->numLedPerStrip (used as a loop bound for FULL_DMA_BUFFER frees).
   uint16_t newNumLedPerStrip = maxLength(sizes, numStrips);
@@ -56,9 +83,11 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   // Now safe to apply all new geometry and configuration.
   this->numStrips = numStrips;
   totalLeds = 0;
+  firstIndexPerOutput[0] = 0;
   for (int i = 0; i < numStrips; i++) {
     stripSize[i] = sizes[i];
     totalLeds += sizes[i];
+    if (i > 0) firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + sizes[i - 1];
   }
   this->numLedPerStrip = newNumLedPerStrip;
   offsetDisplay.offsetx = 0;
@@ -90,7 +119,22 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 /** deleteDriver — frees all DMA buffers and the waitDisp semaphore.  Safe to call
  *  multiple times (all pointers are nulled after free). */
 void I2SClocklessLedDriver::deleteDriver() {
-  #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 for PhysicalDriver not supported yet
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+  if (p4TxUnit != NULL) {
+    parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY);
+    parlio_tx_unit_disable(p4TxUnit);
+    parlio_del_tx_unit(p4TxUnit);
+    p4TxUnit = NULL;
+  }
+  if (p4Buffer1) { heap_caps_free(p4Buffer1); p4Buffer1 = nullptr; }
+  if (p4Buffer2) { heap_caps_free(p4Buffer2); p4Buffer2 = nullptr; }
+  p4BufferActive      = nullptr;
+  p4SetupDone         = false;
+  p4LastOutputs       = -1;
+  p4LastLedsPerOutput = -1;
+#endif
+
+  #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32  // P4 uses PARLIO — no I2S/DMA buffers
   if (dmaBuffersTampon) {
     for (int i = 0; i < nbDmaBuffer + 2; i++) {
       if (dmaBuffersTampon[i]) {
