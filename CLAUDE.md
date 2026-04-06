@@ -46,7 +46,7 @@ There are no automated tests; validation is done by flashing and observing LED o
 The driver serialises LED colour data into 16-bit parallel I2S words (each bit of a colour byte becomes 3 ticks: `100`=0, `110`=1). Transposition converts the per-strip interleaved layout (`strip0_led0, strip1_led0, …`) into the parallel 16-bit format the I2S hardware expects.
 
 Two modes:
-- **Ping-pong DMA** (default): two small DMA buffers filled incrementally by the ISR (`_I2SClocklessLedDriverinterruptHandler`). Requires CPU on each ISR call but uses little RAM.
+- **Ping-pong DMA** (default): two small DMA buffers filled incrementally by the ISR (`interruptHandler`). Requires CPU on each ISR call but uses little RAM.
 - **Full DMA buffer** (`#define FULL_DMA_BUFFER`): entire frame is transposed upfront into one large buffer; I2S runs autonomously. Enables `showPixelsFirstTranspose()`, `showPixelsFromBuffer()`, and `showPixelsFromBuffer(LOOP)`.
 
 ### IDF version branching
@@ -66,11 +66,11 @@ Two modes:
 ### Semaphores
 
 Three FreeRTOS semaphores on the driver object:
-- `I2SClocklessLedDriver_sem` — blocks `showPixels(WAIT)` until transfer done.
-- `I2SClocklessLedDriver_semSync` — frame-sync signal for `waitSync()`.
-- `I2SClocklessLedDriver_waitDisp` — lazy-created in `updateDriver()` to wait for an in-flight DMA to finish before reconfiguring. Released from ISR via `xSemaphoreGiveFromISR`.
+- `sem` — blocks `showPixels(WAIT)` until transfer done.
+- `semSync` — frame-sync signal for `waitSync()`.
+- `waitDisp` — lazy-created in `updateDriver()` to wait for an in-flight DMA to finish before reconfiguring. Released from ISR via `xSemaphoreGiveFromISR`.
 
-The ISR (`i2sStop`, `_I2SClocklessLedDriverinterruptHandler`) is `IRAM_ATTR` and must only use ISR-safe FreeRTOS calls (`xSemaphoreGiveFromISR`, `portYIELD_FROM_ISR`).
+The ISR (`i2sStop`, `interruptHandler`) is `IRAM_ATTR` and must only use ISR-safe FreeRTOS calls (`xSemaphoreGiveFromISR`, `portYIELD_FROM_ISR`).
 
 ## Compile-time options (set before `#include "I2SClocklessLedDriver.h"`)
 

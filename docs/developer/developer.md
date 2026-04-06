@@ -22,13 +22,13 @@ Each LED bit is encoded as 3 I2S clock ticks: `100` = 0-bit, `110` = 1-bit. The 
 
 ### Ping-pong mode (default)
 
-Two small DMA buffers (`DMABuffersTampon[0..N+1]`) are filled one at a time by the ISR. Each ISR call transposes and loads the next LED into the currently-idle buffer. This uses minimal RAM but requires an ISR call per LED column.
+Two small DMA buffers (`dmaBuffersTampon[0..N+1]`) are filled one at a time by the ISR. Each ISR call transposes and loads the next LED into the currently-idle buffer. This uses minimal RAM but requires an ISR call per LED column.
 
-The ISR (`_I2SClocklessLedDriverinterruptHandler` on S3, `_I2SClocklessLedDriverinterruptHandler` on ESP32) is `IRAM_ATTR`-placed and only uses ISR-safe FreeRTOS primitives.
+The ISR (`interruptHandler` on S3, `interruptHandler` on ESP32) is `IRAM_ATTR`-placed and only uses ISR-safe FreeRTOS primitives.
 
 ### Full DMA buffer mode (`FULL_DMA_BUFFER`)
 
-`transposeAll()` pre-transposes the entire frame into `DMABuffersTransposed[0..num_led_per_strip+1]` before the transfer starts. The I2S then runs through the entire chain without interrupts, freeing the CPU completely.
+`transposeAll()` pre-transposes the entire frame into `dmaBuffersTransposed[0..num_led_per_strip+1]` before the transfer starts. The I2S then runs through the entire chain without interrupts, freeing the CPU completely.
 
 This also enables the `LOOP` display mode: the last DMA descriptor points back to the first, creating a continuous ring that the DMA/I2S hardware replays indefinitely.
 
@@ -64,11 +64,11 @@ Three FreeRTOS semaphores live on the driver object:
 
 | Member | Purpose |
 |--------|---------|
-| `I2SClocklessLedDriver_sem` | Blocks `showPixels(WAIT)` until transfer done |
-| `I2SClocklessLedDriver_semSync` | Frame-sync signal for `waitSync()` |
-| `I2SClocklessLedDriver_waitDisp` | Lazy-created; used by `showPixels(NO_WAIT)`, `waitDisplay()`, and `updateDriver()` to wait for an in-flight transfer before proceeding |
+| `sem` | Blocks `showPixels(WAIT)` until transfer done |
+| `semSync` | Frame-sync signal for `waitSync()` |
+| `waitDisp` | Lazy-created; used by `showPixels(NO_WAIT)`, `waitDisplay()`, and `updateDriver()` to wait for an in-flight transfer before proceeding |
 
-`wasWaitingtofinish` is a flag set by any caller that is about to block on `I2SClocklessLedDriver_waitDisp`. The ISR checks the flag in `i2sStop()` and only calls `xSemaphoreGiveFromISR` when a waiter is present, preventing spurious semaphore count accumulation.
+`wasWaitingtofinish` is a flag set by any caller that is about to block on `waitDisp`. The ISR checks the flag in `i2sStop()` and only calls `xSemaphoreGiveFromISR` when a waiter is present, preventing spurious semaphore count accumulation.
 
 All semaphore operations inside `i2sStop()` use `xSemaphoreGiveFromISR` + `portYIELD_FROM_ISR`, as required for ISR context.
 
@@ -77,12 +77,12 @@ All semaphore operations inside `i2sStop()` use `xSemaphoreGiveFromISR` + `portY
 ## Memory layout (`FULL_DMA_BUFFER`)
 
 ```text
-DMABuffersTransposed[0]          — preamble (all zeros)
-DMABuffersTransposed[1..N]       — one buffer per LED column (transposed)
-DMABuffersTransposed[N+1]        — postamble (4× longer for reset timing)
+dmaBuffersTransposed[0]          — preamble (all zeros)
+dmaBuffersTransposed[1..N]       — one buffer per LED column (transposed)
+dmaBuffersTransposed[N+1]        — postamble (4× longer for reset timing)
 ```
 
-In `LOOP` mode, `DMABuffersTransposed[N+1]->next` points back to `DMABuffersTransposed[0]`. `stopDisplayLoop()` sets that pointer to `NULL`.
+In `LOOP` mode, `dmaBuffersTransposed[N+1]->next` points back to `dmaBuffersTransposed[0]`. `stopDisplayLoop()` sets that pointer to `NULL`.
 
 ---
 

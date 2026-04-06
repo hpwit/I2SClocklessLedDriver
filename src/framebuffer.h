@@ -1,3 +1,4 @@
+#ifdef USE_PIXELSLIB
 #pragma once
 // #include "_pixelslib.h"
 #define NB_FRAME 2
@@ -71,3 +72,4 @@ class FrameBuffer {
  private:
   Pixel offPixel{};
 };
+#endif

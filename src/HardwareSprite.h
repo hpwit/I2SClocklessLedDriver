@@ -1,3 +1,4 @@
+#if HARDWARESPRITES == 1
 #include "FastLED.h"
 
 #include <cstdint>
@@ -75,7 +76,7 @@ class HardwareSprite {
     }
   }
   void reorder(int width, int height) {
-    if (displaySprite && leds != nullptr) {
+    if (displaySprite && leds != nullptr && target != nullptr) {
       for (int i = 0; i < SPRITE_WIDTH; i++) {
         for (int j = 0; j < SPRITE_HEIGHT; j++) {
           if (leds[j * SPRITE_WIDTH + i] != transparentColor) {
@@ -96,3 +97,4 @@ class HardwareSprite {
 };
 
 extern HardwareSprite sprites[NBSPRITE];
+#endif

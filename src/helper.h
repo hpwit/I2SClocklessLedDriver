@@ -3,12 +3,12 @@
 #ifndef HELPER_H
   #define HELPER_H
   #define HOW_LONG(name, func)                                                                                                 \
-    {                                                                                                                          \
+    do {                                                                                                                       \
       uint32_t _time1_ = ESP.getCycleCount();                                                                                  \
       func;                                                                                                                    \
       uint32_t _time2_ = ESP.getCycleCount() - _time1_;                                                                        \
       printf("The function *** %s *** took %.2f ms or %.2f fps\n", name, (float)_time2_ / 240000, (float)240000000 / _time2_); \
-    }
+    } while (0)
 
   #define RUN_SKETCH_FOR(name, duration, func)                                              \
     {                                                                                       \

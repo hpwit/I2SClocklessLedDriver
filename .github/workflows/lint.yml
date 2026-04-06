@@ -60,10 +60,15 @@ jobs:
           output=$(clang-tidy \
             -p .lint_db \
             --header-filter="$(pwd)/src/.*" \
-            src/I2SClocklessLedDriver.cpp \
-            src/HardwareSprite.cpp \
-            2>&1) || true
+            "$(pwd)/src/I2SClocklessLedDriver.cpp" \
+            "$(pwd)/src/HardwareSprite.cpp" \
+            2>&1)
+          clang_exit=$?
           echo "$output"
+          if [ -z "$output" ] && [ $clang_exit -ne 0 ]; then
+            echo "clang-tidy failed with exit code $clang_exit but produced no output."
+            exit 1
+          fi
           if echo "$output" | grep -qE "^$(pwd)/src/.*\[[a-z].*\]$"; then
             echo "clang-tidy found violations in project source files."
             exit 1

@@ -1,4 +1,5 @@
 
+#ifdef USE_PIXELSLIB
 #ifdef USE_FASTLED
   #include "FastLED.h"
 #endif
@@ -182,6 +183,7 @@ class Pixels {
     localLedPointer = true;
     if (ledpointer == NULL) {
       pib->pixelSize = 0;
+      pib->numStrips = 0;
     } else {
       pib->pixelSize = size;
     }
@@ -231,9 +233,9 @@ class Pixels {
     }
   }
 
-  void copy(Pixels ori) { copy(ori, LedDirection::FORWARD); }
+  void copy(Pixels& ori) { copy(ori, LedDirection::FORWARD); }
 
-  void copy(Pixels ori, LedDirection dir) {
+  void copy(Pixels& ori, LedDirection dir) {
     LedDirection ledd = direction;
     if (direction == LedDirection::MAP) ledd = LedDirection::FORWARD;
     for (int i = 0; i < ori.pixelSize; i++) {
@@ -273,12 +275,14 @@ class Pixels {
   Pixels createSubset(int start, int length) { return createSubset(start, length, LedDirection::FORWARD); }
 
   Pixels createSubset(int start, LedDirection direction) {
+    if (ledpointer == nullptr || pixelSize <= 0) return Pixels{};
     if (start < 0) start = 0;
     if (start > pixelSize) start = pixelSize;
     return Pixels(pixelSize - start, ledpointer + start, direction);
   }
 
   Pixels createSubset(int start, int length, LedDirection direction) {
+    if (ledpointer == nullptr || pixelSize <= 0) return Pixels{};
     if (start < 0) start = 0;
     if (start > pixelSize) start = pixelSize;
     int remaining = pixelSize - start;
@@ -331,3 +335,4 @@ class Pixels {
    */
   Pixel offPixel;
 };
+#endif

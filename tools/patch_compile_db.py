@@ -109,13 +109,16 @@ for entry in db:
 # Add HardwareSprite.cpp using the same flags (fix up output and source paths)
 if template:
     sprite = dict(template)
-    sprite["file"] = BASE + "/src/HardwareSprite.cpp"
-    sprite["command"] = (
-        template["command"]
-        .replace("I2SClocklessLedDriver.cpp.o", "HardwareSprite.cpp.o")
-        # Replace the relative source path at the end of the command
-        .replace(" src/I2SClocklessLedDriver.cpp", " " + BASE + "/src/HardwareSprite.cpp")
-    )
+    sprite["file"] = os.path.join(BASE, "src", "HardwareSprite.cpp")
+    sprite_parts = shlex.split(template["command"])
+    for idx, part in enumerate(sprite_parts):
+        if part.endswith("I2SClocklessLedDriver.cpp.o"):
+            sprite_parts[idx] = part.replace(
+                "I2SClocklessLedDriver.cpp.o", "HardwareSprite.cpp.o"
+            )
+        elif os.path.basename(part) == "I2SClocklessLedDriver.cpp":
+            sprite_parts[idx] = os.path.join(BASE, "src", "HardwareSprite.cpp")
+    sprite["command"] = " ".join(shlex.quote(p) for p in sprite_parts)
     result.append(sprite)
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)

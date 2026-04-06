@@ -1119,6 +1119,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 #endif
   }
 
+#ifdef USE_PIXELSLIB
   Pixel* strip(int stripNum) {
     Pixel* l = reinterpret_cast<Pixel*>(leds);
     // Serial.printf(" strip %d\n",stripNum);
@@ -1129,6 +1130,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     }
     return l;
   }
+#endif
 
   uint16_t maxLength(uint16_t* sizes, uint8_t numStrips) {
     uint16_t max = 0;
@@ -1569,7 +1571,8 @@ static void IRAM_ATTR i2sStop(I2SClocklessLedDriver* cont) {
   while (LCD_CAM.lcd_user.lcd_start) {
   }
   gdma_stop(dmaChan);
-  ets_delay_us(16);  // for sk6812
+  // ets_delay_us(16);  // for sk6812
+  esp_rom_delay_us(16);  // for sk6812
                      // esp_intr_disable(dmaChan->intr);
 #elif CONFIG_IDF_TARGET_ESP32
   esp_intr_disable(cont->intrHandle);
