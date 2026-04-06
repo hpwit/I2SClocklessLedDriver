@@ -123,6 +123,7 @@ extern clock_speed clock800Khz;
     #include "hal/gpio_ll.h"
     #include "rom/gpio.h"
     #include "soc/gpio_struct.h"
+    #include "esp_rom_sys.h"
   #endif
 
 #endif
@@ -815,15 +816,15 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   }
 
   void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue) {
-    uint8_t W = 0;
+    uint8_t white = 0;
     if (pW != UINT8_MAX) {
-      W = MIN(red, green);
-      W = MIN(W, blue);
-      red = red - W;
-      green = green - W;
-      blue = blue - W;
+      white = MIN(red, green);
+      white = MIN(W, blue);
+      red = red - white;
+      green = green - white;
+      blue = blue - white;
     }
-    setPixelinBufferByStrip(stripNumber, posOnStrip, red, green, blue, W);
+    setPixelinBufferByStrip(stripNumber, posOnStrip, red, green, blue, white);
   }
 
   void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue, uint8_t white, uint8_t white2 = 0) {
@@ -915,13 +916,13 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
   /** Writes one RGB pixel directly into the pre-transposed DMA buffer; derives white channel for RGBW strips. */
   void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
-    uint8_t W = 0;
+    uint8_t white = 0;
     if (pW != UINT8_MAX) {
-      W = MIN(red, green);
-      W = MIN(W, blue);
-      red = red - W;
-      green = green - W;
-      blue = blue - W;
+      white = MIN(red, green);
+      white = MIN(W, blue);
+      red = red - white;
+      green = green - white;
+      blue = blue - white;
     }
 
     setPixelinBuffer(pos, red, green, blue, W);
@@ -1434,7 +1435,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
           esp_intr_disable(intrHandle);
 
-  ets_delay_us(16);
+  esp_rom_delay_us(16);
           (&I2S0)->conf.tx_start = 0;
           while( (&I2S0)->conf.tx_start ==1){}
            i2sReset();
@@ -1571,7 +1572,7 @@ static void IRAM_ATTR i2sStop(I2SClocklessLedDriver* cont) {
 #elif CONFIG_IDF_TARGET_ESP32
   esp_intr_disable(cont->intrHandle);
 
-  ets_delay_us(16);
+  esp_rom_delay_us(16);
   (&I2S0)->conf.tx_start = 0;
   while ((&I2S0)->conf.tx_start == 1) {
   }
