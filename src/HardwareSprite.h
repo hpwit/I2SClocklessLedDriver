@@ -1,3 +1,6 @@
+#ifndef HARDWARESPRITES
+  #define HARDWARESPRITES 0
+#endif
 #if HARDWARESPRITES == 1
 #include "FastLED.h"
 
@@ -75,6 +78,11 @@ class HardwareSprite {
       leds[i] = color;
     }
   }
+  
+  // Composites this sprite into the target buffer.
+  // Precondition: `target` must point to a buffer of at least `width * height`
+  // uint16_t elements. This is the caller's responsibility; no size validation
+  // is performed here since `target` carries no associated size metadata.
   void reorder(int width, int height) {
     if (displaySprite && leds != nullptr && target != nullptr) {
       for (int i = 0; i < SPRITE_WIDTH; i++) {
