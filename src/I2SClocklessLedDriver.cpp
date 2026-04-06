@@ -37,14 +37,14 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   // Wait for any in-progress DMA transfer to complete before freeing buffers.
   // Do this before mutating any members so a timeout leaves the object consistent.
   if (isDisplaying) {
-    wasWaitingtofinish = true;
     if (waitDisp == NULL) waitDisp = xSemaphoreCreateCounting(10, 0);
     if (waitDisp == NULL) {
-      wasWaitingtofinish = false;
       ESP_LOGE(TAG, "updateDriver: failed to create waitDisp semaphore, aborting");
       return;
     }
+    wasWaitingtofinish = true;  // Set AFTER semaphore exists so ISR can safely give it
     if (xSemaphoreTake(waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
+      wasWaitingtofinish = false;  // Clear on timeout to prevent stale ISR signal
       ESP_LOGE(TAG, "updateDriver: timeout waiting for DMA to idle, aborting reconfiguration");
       return;  // members unchanged — old DMA state remains consistent
     }
