@@ -243,9 +243,7 @@ enum DisplayMode {
   LOOP_INTERUPT,
 };
 /*
-int MOD(int a, int b)
-{
-
+int MOD(in
     if (a < 0)
     {
         if (-a % b == 0)
