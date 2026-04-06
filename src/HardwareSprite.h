@@ -1,6 +1,9 @@
 #ifndef HARDWARESPRITES
   #define HARDWARESPRITES 0
 #endif
+
+#pragma once
+
 #if HARDWARESPRITES == 1
 #include "FastLED.h"
 
@@ -78,18 +81,19 @@ class HardwareSprite {
       leds[i] = color;
     }
   }
-  
+
   // Composites this sprite into the target buffer.
   // Precondition: `target` must point to a buffer of at least `width * height`
   // uint16_t elements. This is the caller's responsibility; no size validation
   // is performed here since `target` carries no associated size metadata.
   void reorder(int width, int height) {
     if (displaySprite && leds != nullptr && target != nullptr) {
+      const int bufferSize = width * height;
       for (int i = 0; i < SPRITE_WIDTH; i++) {
         for (int j = 0; j < SPRITE_HEIGHT; j++) {
           if (leds[j * SPRITE_WIDTH + i] != transparentColor) {
             int pixelOffset = offset(i, j, width, height);
-            if (pixelOffset >= 0 && pixelOffset < width * height) target[pixelOffset] = (uint16_t)(((j * SPRITE_WIDTH + i) + spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT) * NB_COMPONENTSS + 1);  // if 0 then no print
+            if (pixelOffset >= 0 && pixelOffset < bufferSize) target[pixelOffset] = (uint16_t)(((j * SPRITE_WIDTH + i) + spritenumber * SPRITE_WIDTH * SPRITE_HEIGHT) * NB_COMPONENTSS + 1);
             // else
             //   Serial.printf("%d %d out\n",i,j);
             // lednumber[j * WIDTH + i] = offset(i, j, width, height);
