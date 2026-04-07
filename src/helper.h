@@ -11,7 +11,7 @@
     } while (0)
 
   #define RUN_SKETCH_FOR(name, duration, func)                                              \
-    do                                                                                      \
+    do {                                                                                    \
       printf("Start Sketch: %s\n", name);                                                   \
       uint32_t _timer1_ = ESP.getCycleCount();                                              \
       uint32_t _timer2_ = ESP.getCycleCount();                                              \
@@ -20,7 +20,7 @@
         _timer2_ = ESP.getCycleCount();                                                     \
       }                                                                                     \
       printf("End Sketch: %s after %.2fms\n", name, (float)(_timer2_ - _timer1_) / 240000); \
-    }  while (0)
+    } while (0)
 
   #define RUN_SKETCH_N_TIMES(name, ntimes, func)               \
     do {                                                       \

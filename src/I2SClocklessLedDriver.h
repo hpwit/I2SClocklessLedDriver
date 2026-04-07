@@ -328,6 +328,8 @@ class I2SClocklessLedDriver {
   uint8_t brightness = 255;
   float gammar = 1.0f, gammag = 1.0f, gammab = 1.0f, gammaw = 1.0f, gammaw2 = 1.0f;
   bool extractWhiteFromRGB = true;  // 🌙
+  bool initErrorOccurred = false;   // Set to true on any allocation failure; reset at start of initLedImpl()
+  bool initSuccess = false;         // Set to true at the end of initLedImpl() only if all allocations succeeded
   intr_handle_t intrHandle = nullptr;
   volatile SemaphoreHandle_t sem = NULL;
   volatile SemaphoreHandle_t semSync = NULL;
@@ -357,7 +359,15 @@ class I2SClocklessLedDriver {
   uint16_t stripSize[MAX_PINS] = {};
   uint32_t (*mapLed)(uint32_t led) = nullptr;
 
-  bool isVirtualDriver = false;  // prepare for virtual driver integration
+  // Virtual driver — multiplexed LED strips via 74HC595 shift registers.
+  // Set isVirtualDriver = true plus clockPin/latchPin before calling initled();
+  // the driver will branch on this flag inside hwInit() and loadAndTranspose().
+  // Currently ESP32/ESP32-S3 only; P4 support planned.
+  bool isVirtualDriver = false;
+
+  uint8_t virtualStripsPerPin = 0;  // typically 8 (one 74HC595 per physical pin); 0 = not configured
+  uint8_t clockPin            = 0;  // 74HC245 shift-register clock GPIO
+  uint8_t latchPin            = 0;  // 74HC245 shift-register latch GPIO
 
   TickType_t showDelay = 0;
 
@@ -381,7 +391,6 @@ class I2SClocklessLedDriver {
   #endif
 
   // Topology-change detection: force PARLIO reconfiguration when these differ.
-  bool p4SetupDone        = false;
   int  p4LastOutputs      = -1;
   int  p4LastLedsPerOutput = -1;
 
@@ -476,21 +485,64 @@ class I2SClocklessLedDriver {
   /** Sets global brightness (0–255) and recomputes gamma lookup tables. */
   void setBrightness(uint8_t brightness) {
     this->brightness = brightness;
-    if (!redMap) redMap = (uint8_t*)malloc(256);
-    if (!greenMap) greenMap = (uint8_t*)malloc(256);
-    if (!blueMap) blueMap = (uint8_t*)malloc(256);
+    
+    // Allocate LUTs if not already allocated
+    if (!redMap) {
+      redMap = (uint8_t*)malloc(256);
+      if (!redMap) {
+        ESP_LOGE(TAG, "Failed to allocate redMap!");
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    
+    if (!greenMap) {
+      greenMap = (uint8_t*)malloc(256);
+      if (!greenMap) {
+        ESP_LOGE(TAG, "Failed to allocate greenMap!");
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    
+    if (!blueMap) {
+      blueMap = (uint8_t*)malloc(256);
+      if (!blueMap) {
+        ESP_LOGE(TAG, "Failed to allocate blueMap!");
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    
     if (pW != UINT8_MAX) {
-      if (!whiteMap) whiteMap = (uint8_t*)malloc(256);
+      if (!whiteMap) {
+        whiteMap = (uint8_t*)malloc(256);
+        if (!whiteMap) {
+          ESP_LOGE(TAG, "Failed to allocate whiteMap!");
+          initErrorOccurred = true;
+          return;
+        }
+      }
     } else {
       free(whiteMap);
       whiteMap = nullptr;
     }
+    
     if (pW2 != UINT8_MAX) {
-      if (!white2Map) white2Map = (uint8_t*)malloc(256);
+      if (!white2Map) {
+        white2Map = (uint8_t*)malloc(256);
+        if (!white2Map) {
+          ESP_LOGE(TAG, "Failed to allocate white2Map!");
+          initErrorOccurred = true;
+          return;
+        }
+      }
     } else {
       free(white2Map);
       white2Map = nullptr;
     }
+    
+    // Fill LUTs with gamma-corrected values
     float tmp;
     for (int i = 0; i < 256; i++) {
       tmp = powf((float)i / 255.0f, 1.0f / gammar);
@@ -679,8 +731,18 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
   dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+  if (!dmaBuffersTampon) {
+    ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
+    initErrorOccurred = true;
+    return;
+  }
 #elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
   dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
+  if (!dmaBuffersTampon) {
+    ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
+    initErrorOccurred = true;
+    return;
+  }
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
@@ -869,6 +931,10 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   }
 
   void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue) {
+    if (!initSuccess) {
+      // Silent return in hot path
+      return;
+    }
     uint8_t white = 0;
     if (pW != UINT8_MAX) {
       white = MIN(red, green);
@@ -881,6 +947,10 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   }
 
   void setPixelinBufferByStrip(int stripNumber, int posOnStrip, uint8_t red, uint8_t green, uint8_t blue, uint8_t white, uint8_t white2 = 0) {
+    if (!initSuccess) {
+      // Silent return in hot path
+      return;
+    }
     uint16_t mask = ~(1 << stripNumber);
     uint8_t colors[3];
     colors[pR] = redMap[red];
@@ -983,6 +1053,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
   /** Initialises the driver without an external LED buffer (buffer managed externally or unused). */
   void initled(uint8_t* pinsq, uint8_t numStrips, uint16_t numLedPerStrip, ColorArrangement cArr = ORDER_GRB) { initled(nullptr, pinsq, numStrips, numLedPerStrip, cArr); }
+
   /**
    * Blocks until the next DMA frame boundary (FULL_DMA_BUFFER + LOOP mode only).
    * Use before writing to the DMA buffer to avoid tearing.
@@ -1109,6 +1180,11 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
   void showPixelsImpl() {
     if (!enableDriver) {
+      return;
+    }
+
+    if (!initSuccess) {
+      // Silent return in hot path - initialization errors should be caught earlier
       return;
     }
 
@@ -1360,6 +1436,10 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   void setShowDelay() { showDelay = (((numLedPerStrip * 125 * 8 * nbComponents) / 100000) + 1); }
 
   void initLedImpl(uint8_t* leds, uint8_t* pinsq, uint8_t numStrips, uint16_t numLedPerStrip) {
+    // Reset error state so retry after a failed initled() works correctly.
+    initErrorOccurred = false;
+    initSuccess       = false;
+
     gammab = 1;
     gammar = 1;
     gammag = 1;
@@ -1389,14 +1469,25 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 #if HARDWARESPRITES == 1
     // Serial.println(NUM_LEDS_PER_STRIP * NBIS2SERIALPINS * 8);
     target = (uint16_t*)malloc(numLedPerStrip * numStrips * 2 + 2);
+    if (!target) {
+      ESP_LOGE(TAG, "Failed to allocate hardware sprite target buffer!");
+      initErrorOccurred = true;
+      return;
+    }
 #endif
 
 #ifdef __HARDWARE_MAP
   #ifndef __NON_HEAP
     hmap = (uint32_t*)malloc(totalLeds * 2);
+    if (!hmap) {
+      ESP_LOGE(TAG, "Failed to allocate hardware map buffer!");
+      initErrorOccurred = true;
+      return;
+    }
   #endif
     if (!hmap) {
       ESP_LOGE(TAG, "no memory for the hamp");
+      initErrorOccurred = true;
       return;
     } else {
       ESP_LOGE(TAG, "trying to map");
@@ -1448,7 +1539,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
           MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
       if (!p4Buffer1) {
         ESP_LOGE(TAG, "Failed to allocate p4Buffer1 - out of memory");
-        p4SetupDone = false;
+        initErrorOccurred = true;
         return;
       }
     }
@@ -1462,22 +1553,24 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
         heap_caps_free(p4Buffer1);
         p4Buffer1 = nullptr;
         p4BufferActive = nullptr;
-        p4SetupDone = false;
+        initErrorOccurred = true;
         return;
       }
     }
     
     p4BufferActive = p4Buffer1;
 
-    // Force PARLIO reconfiguration on the next showPixels().
-    p4SetupDone         = false;
+    // Signal that PARLIO hardware needs (re)configuring on the next showPixels().
+    // Setting -1 is sufficient: the topology comparison always triggers reconfiguration.
     p4LastOutputs       = -1;
     p4LastLedsPerOutput = -1;
+    initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
     return;
 #endif
     setPins(pinsq);
     i2sInit();
     initDMABuffers();
+    initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   }
 
   // update driver: recreate dma buffers if numStrips or numLedPerStrip or dmaBuffer size changed
@@ -1499,13 +1592,16 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   I2SClocklessLedDriverDMABuffer* allocateDMABuffer(int bytes) {
     I2SClocklessLedDriverDMABuffer* b = (I2SClocklessLedDriverDMABuffer*)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
     if (!b) {
-      ESP_LOGE(TAG, "No more memory\n");
+      ESP_LOGE(TAG, "Failed to allocate DMA buffer descriptor!");
+      initErrorOccurred = true;
       return NULL;
     }
 
     b->buffer = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_DMA);
     if (!b->buffer) {
-      ESP_LOGE(TAG, "No more memory\n");
+      ESP_LOGE(TAG, "Failed to allocate DMA buffer!");
+      initErrorOccurred = true;
+      free(b);
       return NULL;
     }
     memset(b->buffer, 0, bytes);

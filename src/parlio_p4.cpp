@@ -153,18 +153,6 @@ void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transp
 }  // namespace LedMatrixDetail
 
 // ---------------------------------------------------------------------------
-// Safe LUT access helper
-// ---------------------------------------------------------------------------
-
-/**
- * safeLutLookup — safely access a LUT with fallback to identity mapping
- * if the LUT pointer is null (e.g., before setBrightness() is called).
- */
-static inline uint8_t safeLutLookup(uint8_t* lut, uint8_t value) {
-    return lut ? lut[value] : value;
-}
-
-// ---------------------------------------------------------------------------
 // Per-pixel colour mapping  (brightness + gamma LUTs, wire-order repack)
 // ---------------------------------------------------------------------------
 
@@ -177,7 +165,7 @@ static inline uint8_t safeLutLookup(uint8_t* lut, uint8_t value) {
  *
  * Bug fixed vs original parlio.cpp: warm white now correctly uses white2Map
  * instead of whiteMap.
- * Safety improvement: checks LUT pointers before dereferencing.
+ * Requires: LUTs must be validated before calling this function.
  */
 static void rgbwBufferMapping(uint8_t* packetRGBChannel,
                                const uint8_t* lightsRGBChannel,
@@ -200,17 +188,17 @@ static void rgbwBufferMapping(uint8_t* packetRGBChannel,
             green -= white;
             blue  -= white;
         }
-        packetRGBChannel[offsetWhite] = safeLutLookup(driver->whiteMap, white);
+        packetRGBChannel[offsetWhite] = driver->whiteMap[white];
     }
 
     // 🌙 Warm white (RGBCCT): input byte 4, use white2Map (bug fix: was whiteMap)
     if (offsetWhite2 != UINT8_MAX) {
-        packetRGBChannel[offsetWhite2] = safeLutLookup(driver->white2Map, lightsRGBChannel[4]);
+        packetRGBChannel[offsetWhite2] = driver->white2Map[lightsRGBChannel[4]];
     }
 
-    packetRGBChannel[offsetRed]   = safeLutLookup(driver->redMap, red);
-    packetRGBChannel[offsetGreen] = safeLutLookup(driver->greenMap, green);
-    packetRGBChannel[offsetBlue]  = safeLutLookup(driver->blueMap, blue);
+    packetRGBChannel[offsetRed]   = driver->redMap[red];
+    packetRGBChannel[offsetGreen] = driver->greenMap[green];
+    packetRGBChannel[offsetBlue]  = driver->blueMap[blue];
 }
 
 // ---------------------------------------------------------------------------
@@ -376,8 +364,7 @@ uint8_t __attribute__((hot)) show_parlio_p4(
     // ------------------------------------------------------------------
     // Lazy (re)configuration: only when topology changes
     // ------------------------------------------------------------------
-    if (!driver->p4SetupDone ||
-        (int)outputs  != driver->p4LastOutputs ||
+    if ((int)outputs  != driver->p4LastOutputs ||
         (int)max_leds != driver->p4LastLedsPerOutput) {
 
         // Data width: smallest power-of-2 that covers all outputs
@@ -427,7 +414,6 @@ uint8_t __attribute__((hot)) show_parlio_p4(
 
         driver->p4LastOutputs       = outputs;
         driver->p4LastLedsPerOutput = max_leds;
-        driver->p4SetupDone         = true;
 
         ESP_LOGD(TAG, "Parallel IO configured: %u-bit width, %u KHz, %u outputs",
                  driver->p4Config.data_width, driver->p4Config.output_clk_freq_hz / 1000u / 4u, outputs);
