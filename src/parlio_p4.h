@@ -17,6 +17,12 @@
 
 #include <stdint.h>
 
+/** Shared waveform-buffer size used by both the allocator (I2SClocklessLedDriver.h)
+ *  and the capacity check (parlio_p4.cpp).
+ *  Formula: max_leds × max_components × 32 ticks × max_data_width_bits / 8
+ *           = 1024 × 5 × 32 × 16 / 8 = 327,680 bytes */
+static constexpr uint32_t PARLIO_P4_BUFFER_BYTES = 1024u * 5u * 32u * 16u / 8u;
+
 class I2SClocklessLedDriver;
 
 /**

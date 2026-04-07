@@ -21,7 +21,8 @@
 
 #include "I2SClocklessLedDriver.h"
 
-#include "Arduino.h"
+#include "esp_timer.h"
+#include "esp_rom_sys.h"
 #if HAS_PARLIO_DRIVER
 #include "driver/parlio_tx.h"
 #endif
@@ -336,8 +337,6 @@ static const parlio_transmit_config_t transmit_config = {
  *   max_leds × max_components × 32 ticks × max_data_width_bits / 8
  *   = 1024 × 5 × 32 × 16 / 8 = 327,680 bytes
  */
-// Repacked waveform buffer — large enough for 1024 LEDs × 5 channels × 16-bit width
-static const uint32_t REPACKED_BUFFER_BYTES = 1024u * 5u * 32u * 16u / 8u;  // 327,680 bytes
 
 uint8_t __attribute__((hot)) show_parlio_p4(
         I2SClocklessLedDriver* driver,
@@ -424,6 +423,8 @@ uint8_t __attribute__((hot)) show_parlio_p4(
             ESP_LOGD(TAG, "  Output %u = GPIO %d %s",
                      (unsigned)(i + 1), (int)driver->p4Config.data_gpio_nums[i], status);
         }
+        ESP_LOGI(TAG, "PARLIO reconfigured (%u outputs, %u LEDs/output) — skipping warm-up frame",
+                 (unsigned)outputs, (unsigned)max_leds);
         return 0;  // give the hardware one frame to settle after reconfiguration
     }
 
@@ -432,10 +433,10 @@ uint8_t __attribute__((hot)) show_parlio_p4(
     // ------------------------------------------------------------------
     const uint32_t required_bytes =
         ((uint32_t)max_leds * components * 32u * driver->p4Config.data_width + 7u) / 8u;
-    if (required_bytes > REPACKED_BUFFER_BYTES) {
+    if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
         ESP_LOGE(TAG, "show_parlio_p4: repacked buffer too small "
                       "(%u needed, %u allocated) for %u LEDs × %u ch × %u-bit — skipping frame",
-                 (unsigned)required_bytes, (unsigned)REPACKED_BUFFER_BYTES,
+                 (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES,
                  (unsigned)max_leds, (unsigned)components,
                  (unsigned)driver->p4Config.data_width);
         return 2;
@@ -487,10 +488,10 @@ uint8_t __attribute__((hot)) show_parlio_p4(
     chunk_ptrs[3]   = chunk_ptrs[2] + chunk_stride;
 
     // Wait for the previous frame to finish transmitting, then swap ping-pong buffers.
-    unsigned long before = micros();
+    int64_t before = esp_timer_get_time();
     ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY));
-    unsigned long after = micros();
-    if (after - before < 50) delayMicroseconds(20);
+    int64_t after = esp_timer_get_time();
+    if (after - before < 50) esp_rom_delay_us(20);
 
     // Swap so the next call writes into the buffer not currently being transmitted.
     driver->p4BufferActive = (driver->p4BufferActive == driver->p4Buffer1)

@@ -131,7 +131,7 @@ void I2SClocklessLedDriver::deleteDriver() {
   if (p4Buffer1) { heap_caps_free(p4Buffer1); p4Buffer1 = nullptr; }
   if (p4Buffer2) { heap_caps_free(p4Buffer2); p4Buffer2 = nullptr; }
   p4BufferActive      = nullptr;
-  p4SetupDone         = false;
+  initSuccess         = false;
   p4LastOutputs       = -1;
   p4LastLedsPerOutput = -1;
 #endif

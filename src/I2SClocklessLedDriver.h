@@ -1531,11 +1531,9 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     // PARLIO unit is reconfigured on the next showPixels() call.
     setPins(pinsq);
 
-    static const uint32_t P4_BUF_BYTES = 1024u * 5u * 32u * 16u / 8u;  // 327,680 bytes
-    
     // Allocate buffers with proper error handling
     if (!p4Buffer1) {
-      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(P4_BUF_BYTES, 1, 2,
+      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
       if (!p4Buffer1) {
         ESP_LOGE(TAG, "Failed to allocate p4Buffer1 - out of memory");
@@ -1545,7 +1543,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     }
     
     if (!p4Buffer2) {
-      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(P4_BUF_BYTES, 1, 2,
+      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
           MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
       if (!p4Buffer2) {
         ESP_LOGE(TAG, "Failed to allocate p4Buffer2 - out of memory");
