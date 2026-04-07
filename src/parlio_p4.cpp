@@ -239,7 +239,7 @@ static void create_transposed_led_output_optimized(
         0b1110111011101000, 0b1110111011101110,
     };
 
-    // Not guarded with std::call_once: show_parlio_p4 is always invoked from a
+    // Not guarded with std::call_once: loadAndTranspose is always invoked from a
     // single task (no concurrent calls), and the initialisation is idempotent —
     // a torn write produces the same final values, so a race is harmless here.
     if (!waveform_cache_initialized) {
@@ -326,166 +326,178 @@ static const parlio_transmit_config_t transmit_config = {
 };
 
 // ---------------------------------------------------------------------------
-// Public entry point
+// Public entry points (Phase 1 vocabulary: initTransferBuffers / hwInit /
+//   loadAndTranspose / hwStart / hwStop)
 // ---------------------------------------------------------------------------
 
-/**
- * show_parlio_p4 — top-level driver call, matches the I2SClocklessLedDriver
- * showPixels() contract for the ESP32-P4 platform.
- *
- * The PARLIO unit is configured lazily on the first call and automatically
- * reconfigured when the number of outputs or max-LEDs-per-output changes.
- *
- * Buffer size for the repacked waveform:
- *   max_leds × max_components × 32 ticks × max_data_width_bits / 8
- *   = 1024 × 5 × 32 × 16 / 8 = 327,680 bytes
- */
+bool initTransferBuffers(I2SClocklessLedDriver* driver) {
+    if (!driver->p4Buffer1) {
+        driver->p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+        if (!driver->p4Buffer1) {
+            ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer1 — out of memory");
+            driver->initErrorOccurred = true;
+            return false;
+        }
+    }
+    if (!driver->p4Buffer2) {
+        driver->p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
+            MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+        if (!driver->p4Buffer2) {
+            ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer2 — out of memory");
+            heap_caps_free(driver->p4Buffer1);
+            driver->p4Buffer1   = nullptr;
+            driver->p4BufferActive = nullptr;
+            driver->initErrorOccurred = true;
+            return false;
+        }
+    }
+    driver->p4BufferActive      = driver->p4Buffer1;
+    // Force hwInit to (re)configure the PARLIO unit on the first showPixels() call.
+    driver->p4LastOutputs       = -1;
+    driver->p4LastLedsPerOutput = -1;
+    return true;
+}
 
-uint8_t __attribute__((hot)) show_parlio_p4(
-        I2SClocklessLedDriver* driver,
-        uint8_t*  parallelPins,
-        uint32_t  length,
-        uint8_t*  buffer_in,
-        uint8_t   components,
-        uint8_t   outputs,
-        uint16_t* leds_per_output,
-        uint8_t   offsetR, uint8_t offsetG, uint8_t offsetB,
-        uint8_t   offsetW, uint8_t offsetW2) {
-
+bool hwInit(I2SClocklessLedDriver* driver) {
     #if !HAS_PARLIO_DRIVER
-    ESP_LOGE(TAG, "PARLIO driver not available - ESP-IDF v5.1+ required for ESP32-P4 support");
-    return 1;
+    ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
+    return true;  // treat as warm-up / skip frame
     #endif
 
+    uint8_t outputs = driver->numStrips;
     if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
         outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
-
-    // All mutable state lives on the driver object — no statics here.
     const uint16_t max_leds = driver->numLedPerStrip;
 
-    // ------------------------------------------------------------------
-    // Lazy (re)configuration: only when topology changes
-    // ------------------------------------------------------------------
-    if ((int)outputs  != driver->p4LastOutputs ||
-        (int)max_leds != driver->p4LastLedsPerOutput) {
+    // No topology change — nothing to do.
+    if ((int)outputs == driver->p4LastOutputs && (int)max_leds == driver->p4LastLedsPerOutput)
+        return false;
 
-        // Data width: smallest power-of-2 that covers all outputs
-        driver->p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
-        if      (outputs <= 1)  driver->p4Config.data_width = 1;
-        else if (outputs <= 2)  driver->p4Config.data_width = 2;
-        else if (outputs <= 4)  driver->p4Config.data_width = 4;
-        else if (outputs <= 8)  driver->p4Config.data_width = 8;
-        else                    driver->p4Config.data_width = 16;
+    // Data width: smallest power-of-2 that covers all outputs.
+    driver->p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
+    if      (outputs <= 1)  driver->p4Config.data_width = 1;
+    else if (outputs <= 2)  driver->p4Config.data_width = 2;
+    else if (outputs <= 4)  driver->p4Config.data_width = 4;
+    else if (outputs <= 8)  driver->p4Config.data_width = 8;
+    else                    driver->p4Config.data_width = 16;
 
-        driver->p4Config.clk_in_gpio_num  = gpio_num_t(-1);
-        driver->p4Config.valid_gpio_num   = gpio_num_t(-1);
-        driver->p4Config.clk_out_gpio_num = gpio_num_t(-1);
+    driver->p4Config.clk_in_gpio_num  = gpio_num_t(-1);
+    driver->p4Config.valid_gpio_num   = gpio_num_t(-1);
+    driver->p4Config.clk_out_gpio_num = gpio_num_t(-1);
 
-        for (int i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; ++i) {
-            driver->p4Config.data_gpio_nums[i] =
-                (i < outputs) ? gpio_num_t(parallelPins[i]) : gpio_num_t(-1);
-        }
-
-        // Adaptive clock: fewer LEDs → faster clock → higher FPS
-#ifdef PARLIO_AUTO_OVERCLOCK
-        if      (max_leds <= 256) driver->p4Config.output_clk_freq_hz = 1200000u * 4u;
-        else if (max_leds <= 512) driver->p4Config.output_clk_freq_hz = 1100000u * 4u;
-        else                      driver->p4Config.output_clk_freq_hz =  800000u * 4u;
-#else
-        driver->p4Config.output_clk_freq_hz = 800000u * 4u;
-#endif
-        driver->p4Config.valid_start_delay = 0;
-        driver->p4Config.valid_stop_delay  = 0;
-        driver->p4Config.dma_burst_size    = 64;
-        driver->p4Config.trans_queue_depth = 16;
-        driver->p4Config.max_transfer_size = 65535;
-        driver->p4Config.flags.clk_gate_en        = 0;
-        driver->p4Config.flags.io_loop_back       = 0;
-        driver->p4Config.flags.allow_pd           = 0;
-        driver->p4Config.flags.invert_valid_out   = 0;
-
-        if (driver->p4TxUnit != NULL) {
-            esp_err_t err;
-            if ((err = parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY)) != ESP_OK)
-                ESP_LOGE(TAG, "parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
-            if ((err = parlio_tx_unit_disable(driver->p4TxUnit)) != ESP_OK)
-                ESP_LOGE(TAG, "parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
-            if ((err = parlio_del_tx_unit(driver->p4TxUnit)) != ESP_OK)
-                ESP_LOGE(TAG, "parlio_del_tx_unit failed: %s", esp_err_to_name(err));
-            driver->p4TxUnit = NULL;
-        }
-
-        esp_err_t err;
-        if ((err = parlio_new_tx_unit(&driver->p4Config, &driver->p4TxUnit)) != ESP_OK) {
-            ESP_LOGE(TAG, "parlio_new_tx_unit failed: %s", esp_err_to_name(err));
-            driver->p4TxUnit = NULL;
-            return 3;
-        }
-        if ((err = parlio_tx_unit_enable(driver->p4TxUnit)) != ESP_OK) {
-            ESP_LOGE(TAG, "parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
-            parlio_del_tx_unit(driver->p4TxUnit);
-            driver->p4TxUnit = NULL;
-            return 3;
-        }
-
-        driver->p4LastOutputs       = outputs;
-        driver->p4LastLedsPerOutput = max_leds;
-
-        ESP_LOGD(TAG, "Parallel IO configured: %u-bit width, %u KHz, %u outputs",
-                 driver->p4Config.data_width, driver->p4Config.output_clk_freq_hz / 1000u / 4u, outputs);
-        for (uint8_t i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; i++) {
-            const char* status = "";
-            if (i >= outputs) status = "[unused]";
-            else if (driver->p4Config.data_gpio_nums[i] == -1) status = "[missing]";
-            ESP_LOGD(TAG, "  Output %u = GPIO %d %s",
-                     (unsigned)(i + 1), (int)driver->p4Config.data_gpio_nums[i], status);
-        }
-        ESP_LOGI(TAG, "PARLIO reconfigured (%u outputs, %u LEDs/output) — skipping warm-up frame",
-                 (unsigned)outputs, (unsigned)max_leds);
-        return 0;  // give the hardware one frame to settle after reconfiguration
+    for (int i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; ++i) {
+        driver->p4Config.data_gpio_nums[i] =
+            (i < outputs) ? gpio_num_t(driver->pins[i]) : gpio_num_t(-1);
     }
 
-    // ------------------------------------------------------------------
-    // Guard: check repacked buffer is large enough for current config
-    // ------------------------------------------------------------------
+    // Adaptive clock: fewer LEDs → faster clock → higher FPS.
+#ifdef PARLIO_AUTO_OVERCLOCK
+    if      (max_leds <= 256) driver->p4Config.output_clk_freq_hz = 1200000u * 4u;
+    else if (max_leds <= 512) driver->p4Config.output_clk_freq_hz = 1100000u * 4u;
+    else                      driver->p4Config.output_clk_freq_hz =  800000u * 4u;
+#else
+    driver->p4Config.output_clk_freq_hz = 800000u * 4u;
+#endif
+    driver->p4Config.valid_start_delay       = 0;
+    driver->p4Config.valid_stop_delay        = 0;
+    driver->p4Config.dma_burst_size          = 64;
+    driver->p4Config.trans_queue_depth       = 16;
+    driver->p4Config.max_transfer_size       = 65535;
+    driver->p4Config.flags.clk_gate_en       = 0;
+    driver->p4Config.flags.io_loop_back      = 0;
+    driver->p4Config.flags.allow_pd          = 0;
+    driver->p4Config.flags.invert_valid_out  = 0;
+
+    if (driver->p4TxUnit != NULL) {
+        esp_err_t err;
+        if ((err = parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY)) != ESP_OK)
+            ESP_LOGE(TAG, "hwInit: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+        if ((err = parlio_tx_unit_disable(driver->p4TxUnit)) != ESP_OK)
+            ESP_LOGE(TAG, "hwInit: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+        if ((err = parlio_del_tx_unit(driver->p4TxUnit)) != ESP_OK)
+            ESP_LOGE(TAG, "hwInit: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
+        driver->p4TxUnit = NULL;
+    }
+
+    esp_err_t err;
+    if ((err = parlio_new_tx_unit(&driver->p4Config, &driver->p4TxUnit)) != ESP_OK) {
+        ESP_LOGE(TAG, "hwInit: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
+        driver->p4TxUnit = NULL;
+        return true;  // skip frame — hardware is not ready
+    }
+    if ((err = parlio_tx_unit_enable(driver->p4TxUnit)) != ESP_OK) {
+        ESP_LOGE(TAG, "hwInit: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
+        parlio_del_tx_unit(driver->p4TxUnit);
+        driver->p4TxUnit = NULL;
+        return true;  // skip frame — hardware is not ready
+    }
+
+    driver->p4LastOutputs       = outputs;
+    driver->p4LastLedsPerOutput = max_leds;
+
+    ESP_LOGD(TAG, "PARLIO configured: %u-bit width, %u KHz, %u outputs",
+             driver->p4Config.data_width, driver->p4Config.output_clk_freq_hz / 1000u / 4u, outputs);
+    for (uint8_t i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; i++) {
+        const char* status = "";
+        if (i >= outputs) status = "[unused]";
+        else if (driver->p4Config.data_gpio_nums[i] == -1) status = "[missing]";
+        ESP_LOGD(TAG, "  Output %u = GPIO %d %s",
+                 (unsigned)(i + 1), (int)driver->p4Config.data_gpio_nums[i], status);
+    }
+    ESP_LOGI(TAG, "PARLIO reconfigured (%u outputs, %u LEDs/output) — skipping warm-up frame",
+             (unsigned)outputs, (unsigned)max_leds);
+    return true;  // warm-up frame: give the hardware one frame to settle
+}
+
+void __attribute__((hot)) loadAndTranspose(I2SClocklessLedDriver* driver) {
+    uint8_t outputs = driver->numStrips;
+    if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
+        outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
+    const uint16_t max_leds  = driver->numLedPerStrip;
+    const uint8_t  components = driver->nbComponents;
+
+    // Guard: waveform buffer must be large enough for the current config.
     const uint32_t required_bytes =
         ((uint32_t)max_leds * components * 32u * driver->p4Config.data_width + 7u) / 8u;
     if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
-        ESP_LOGE(TAG, "show_parlio_p4: repacked buffer too small "
+        ESP_LOGE(TAG, "loadAndTranspose: buffer too small "
                       "(%u needed, %u allocated) for %u LEDs × %u ch × %u-bit — skipping frame",
                  (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES,
                  (unsigned)max_leds, (unsigned)components,
                  (unsigned)driver->p4Config.data_width);
-        return 2;
+        return;
     }
 
-    // ------------------------------------------------------------------
-    // Transpose: raw LED data → parallel waveform buffer (into active ping-pong buffer)
-    // ------------------------------------------------------------------
     create_transposed_led_output_optimized(
-        driver, buffer_in, driver->p4BufferActive,
-        leds_per_output, outputs, components,
-        offsetR, offsetG, offsetB, offsetW, offsetW2);
+        driver, driver->leds, driver->p4BufferActive,
+        driver->stripSize, outputs, components,
+        driver->pR, driver->pG, driver->pB, driver->pW, driver->pW2);
+}
 
-    // ------------------------------------------------------------------
-    // Chunk the output to respect the hardware 65535-byte DMA limit
-    // ------------------------------------------------------------------
-    const uint32_t symbols_per_pixel  = components * 32u;
-    const uint32_t bits_per_pixel     = symbols_per_pixel * driver->p4Config.data_width;
-    const uint32_t bytes_per_pixel    = (bits_per_pixel + 7u) / 8u;
+void hwStart(I2SClocklessLedDriver* driver) {
+    const uint8_t  components = driver->nbComponents;
+    const uint16_t max_leds   = driver->numLedPerStrip;
+
+    // Compute chunk layout from the current (pre-swap) active buffer.
+    const uint32_t bits_per_pixel   = components * 32u * driver->p4Config.data_width;
+    const uint32_t bytes_per_pixel  = (bits_per_pixel + 7u) / 8u;
+    // bytes_per_pixel == 0 cannot happen (components >= 3, data_width >= 1), but guard anyway.
+    if (bytes_per_pixel == 0) {
+        ESP_LOGE(TAG, "hwStart: bytes_per_pixel == 0 — skipping frame");
+        return;
+    }
     const uint32_t HW_MAX_BYTES       = driver->p4Config.max_transfer_size;
-    const uint16_t max_leds_per_chunk = (bytes_per_pixel > 0) ? (HW_MAX_BYTES / bytes_per_pixel) : 0;
-    const uint8_t  num_chunks         = (max_leds_per_chunk > 0)
-        ? (uint8_t)((max_leds + max_leds_per_chunk - 1u) / max_leds_per_chunk)
-        : 1u;
+    const uint16_t max_leds_per_chunk = HW_MAX_BYTES / bytes_per_pixel;
+    const uint8_t  num_chunks         = (uint8_t)((max_leds + max_leds_per_chunk - 1u) / max_leds_per_chunk);
+    const size_t   chunk_stride       = (size_t)max_leds_per_chunk * bytes_per_pixel;
 
-    uint32_t    chunk_bits[4];
+    uint32_t       chunk_bits[4];
     const uint8_t* chunk_ptrs[4];
-    uint32_t leds_remaining     = max_leds;
-    const size_t chunk_stride   = (size_t)max_leds_per_chunk * bytes_per_pixel;
-
+    uint32_t leds_remaining = max_leds;
     uint32_t leds_in_chunk;
 
+    // chunk_ptrs are captured from the CURRENT active buffer before ping-pong swap.
     leds_in_chunk   = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
     chunk_bits[0]   = leds_in_chunk * bits_per_pixel;
     chunk_ptrs[0]   = (const uint8_t*)driver->p4BufferActive;
@@ -504,24 +516,26 @@ uint8_t __attribute__((hot)) show_parlio_p4(
     chunk_bits[3]   = leds_remaining * bits_per_pixel;
     chunk_ptrs[3]   = chunk_ptrs[2] + chunk_stride;
 
-    // Wait for the previous frame to finish transmitting, then swap ping-pong buffers.
-    int64_t before = esp_timer_get_time();
-    ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY));
-    int64_t after = esp_timer_get_time();
-    if (after - before < 50) esp_rom_delay_us(20);
-
-    // Swap so the next call writes into the buffer not currently being transmitted.
+    // Swap ping-pong: next loadAndTranspose writes to the idle buffer.
     driver->p4BufferActive = (driver->p4BufferActive == driver->p4Buffer1)
         ? driver->p4Buffer2 : driver->p4Buffer1;
 
+    // Queue chunks for non-blocking PARLIO TX.
     for (int i = 0; i < num_chunks && i < 4; ++i) {
         if (chunk_bits[i] > 0) {
             ESP_ERROR_CHECK(parlio_tx_unit_transmit(
                 driver->p4TxUnit, chunk_ptrs[i], chunk_bits[i], &transmit_config));
         }
     }
+}
 
-    return 0;
+void hwStop(I2SClocklessLedDriver* driver) {
+    // Block until the PARLIO TX unit has finished transmitting.
+    // A short guard delay is added when the wait returned immediately (hardware idle).
+    int64_t before = esp_timer_get_time();
+    ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY));
+    int64_t after = esp_timer_get_time();
+    if (after - before < 50) esp_rom_delay_us(20);
 }
 
 #endif  // CONFIG_IDF_TARGET_ESP32P4

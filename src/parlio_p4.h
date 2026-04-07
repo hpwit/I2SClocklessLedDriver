@@ -26,31 +26,40 @@ static constexpr uint32_t PARLIO_P4_BUFFER_BYTES = 1024u * 5u * 32u * 16u / 8u;
 class I2SClocklessLedDriver;
 
 /**
- * show_parlio_p4 — drive parallel LED strips on ESP32-P4 using the PARLIO peripheral.
- *
- * Equivalent to showPixels() on ESP32/S3 but uses the hardware Parallel IO peripheral
- * instead of I2S+DMA.  The parlio unit is configured lazily on the first call and
- * reconfigured automatically whenever the number of outputs or LEDs-per-output changes.
- *
- * @param driver          Pointer to the owning I2SClocklessLedDriver (for LUT tables).
- * @param parallelPins    GPIO pin numbers for each output (array length: outputs).
- * @param length          Total number of LEDs across all outputs.
- * @param buffer_in       Raw LED data buffer (components bytes per pixel, RGB-ordered input).
- * @param components      Bytes per pixel: 3 = RGB, 4 = RGBW, 5 = RGBCCT.
- * @param outputs         Number of parallel outputs (≤ SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH).
- * @param leds_per_output Per-output LED count (array length: outputs).
- * @param offsetR         Wire-order position of the Red channel.
- * @param offsetG         Wire-order position of the Green channel.
- * @param offsetB         Wire-order position of the Blue channel.
- * @param offsetW         Wire-order position of the White channel (UINT8_MAX = absent).
- * @param offsetW2        Wire-order position of the warm White channel (UINT8_MAX = absent).
- * @return 0 on success/setup, non-zero on error.
+ * initTransferBuffers — allocate the two ping-pong waveform buffers used by the
+ * PARLIO driver.  Called once from initLedImpl() on ESP32-P4.
+ * Sets driver->initErrorOccurred on failure.
+ * @return true on success, false if allocation failed.
  */
-uint8_t show_parlio_p4(I2SClocklessLedDriver* driver,
-                       uint8_t* parallelPins, uint32_t length,
-                       uint8_t* buffer_in, uint8_t components,
-                       uint8_t outputs, uint16_t* leds_per_output,
-                       uint8_t offsetR, uint8_t offsetG, uint8_t offsetB,
-                       uint8_t offsetW, uint8_t offsetW2);
+bool initTransferBuffers(I2SClocklessLedDriver* driver);
+
+/**
+ * hwInit — lazily configure the PARLIO TX unit.  Called at the start of every
+ * showPixels() on P4; only reconfigures when the number of outputs or
+ * LEDs-per-output has changed.
+ * @return true  = hardware was (re)configured — skip this frame (warm-up).
+ *         false = topology unchanged — proceed with loadAndTranspose / hwStart / hwStop.
+ */
+bool hwInit(I2SClocklessLedDriver* driver);
+
+/**
+ * loadAndTranspose — bit-transpose the raw LED buffer into the active ping-pong
+ * waveform buffer, applying brightness/gamma LUT tables in the same pass.
+ * Must only be called after hwInit() returns false.
+ */
+void loadAndTranspose(I2SClocklessLedDriver* driver);
+
+/**
+ * hwStart — compute DMA chunk descriptors from the current active waveform buffer,
+ * swap the ping-pong buffers, then queue the chunks for non-blocking PARLIO TX.
+ * After this call driver->p4BufferActive points to the idle buffer for the next frame.
+ */
+void hwStart(I2SClocklessLedDriver* driver);
+
+/**
+ * hwStop — block until the PARLIO TX unit has finished transmitting the current
+ * frame.  Adds a short guard delay when the wait returned immediately (idle hardware).
+ */
+void hwStop(I2SClocklessLedDriver* driver);
 
 #endif  // CONFIG_IDF_TARGET_ESP32P4

@@ -245,17 +245,7 @@ uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb); #endif
 
 static void loadAndTranspose(I2SClocklessLedDriver* driver);
 
-enum ColorArrangement {
-  ORDER_GRBW,
-  ORDER_RGB,
-  ORDER_RBG,
-  ORDER_GRB,
-  ORDER_GBR,
-  ORDER_BRG,
-  ORDER_BGR,
-  ORDER_RGBW,
-  ORDER_RGBCCT,
-};
+#include "colorarrangement.h"
 
 enum DisplayMode {
   NO_WAIT,
@@ -1199,10 +1189,14 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     }
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    // P4: PARLIO driver is fully synchronous — it blocks until the frame is transmitted.
-    // Reset isDisplaying here (no ISR will do it) so the next showPixels() call doesn't block.
-    show_parlio_p4(this, pins, totalLeds, leds, nbComponents,
-                   numStrips, stripSize, pR, pG, pB, pW, pW2);
+    if (hwInit(this)) {
+      // PARLIO unit was (re)configured — skip this frame as a warm-up.
+      isDisplaying = false;
+      return;
+    }
+    loadAndTranspose(this);
+    hwStart(this);
+    hwStop(this);
     isDisplaying = false;
     return;
 #endif
@@ -1290,7 +1284,24 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 #ifdef USE_PIXELSLIB
   void initled(Pixels pix, uint8_t* pinsq) { initled((uint8_t*)pix.getPixels(), pinsq, pix.getLengths(), pix.getNumStrip()); }
 #endif
-  // initled with explicit raw component layout (advanced use)
+  /**
+   * CANONICAL initled — the primary entry point.  All other initled() overloads
+   * are convenience wrappers that translate their arguments and call this one.
+   *
+   * @param leds              Pointer to the LED byte buffer (nbComponents bytes per pixel,
+   *                          strips laid out sequentially). May be nullptr if the buffer
+   *                          will be set later.
+   * @param pinsq             GPIO pin numbers, one per strip (array length: numStrips).
+   * @param sizes             LED count per strip (array length: numStrips).
+   * @param numStrips         Number of parallel strips (max MAX_PINS).
+   * @param nbComponents      Bytes per pixel: 3 = RGB, 4 = RGBW, 5 = RGBCCT.
+   * @param pR                Wire-order byte offset of the Red channel.
+   * @param pG                Wire-order byte offset of the Green channel.
+   * @param pB                Wire-order byte offset of the Blue channel.
+   * @param pW                Wire-order byte offset of the White channel (UINT8_MAX = absent).
+   * @param pW2               Wire-order byte offset of the warm White channel (UINT8_MAX = absent).
+   * @param extractWhiteFromRGB  Derive white from the minimum of R/G/B and subtract.
+   */
   void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t nbComponents, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
     if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args numStrips=%u sizes=%p pinsq=%p", numStrips, (void*)sizes, (void*)pinsq);
@@ -1324,81 +1335,11 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
    * @param numStrips Number of parallel strips (max MAX_PINS).
    * @param cArr      Colour byte order; defaults to ORDER_GRB.
    */
+  /** Convenience overload — variable strip lengths, colour order via ColorArrangement enum. */
   void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, ColorArrangement cArr = ORDER_GRB) {
-    if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS) {
-      ESP_LOGE(TAG, "initled: invalid args numStrips=%u sizes=%p pinsq=%p", numStrips, (void*)sizes, (void*)pinsq);
-      return;
-    }
-    totalLeds = 0;
-    for (int i = 0; i < numStrips; i++) {
-      this->stripSize[i] = sizes[i];
-      totalLeds += sizes[i];
-    }
-    uint16_t maximum = maxLength(sizes, numStrips);
-
-    pW = UINT8_MAX;
-    pW2 = UINT8_MAX;
-    switch (cArr) {
-    case ORDER_RGB:
-      nbComponents = 3;
-      pR = 0;
-      pG = 1;
-      pB = 2;
-      break;
-    case ORDER_RBG:
-      nbComponents = 3;
-      pR = 0;
-      pG = 2;
-      pB = 1;
-      break;
-    case ORDER_GRB:
-      nbComponents = 3;
-      pR = 1;
-      pG = 0;
-      pB = 2;
-      break;
-    case ORDER_GBR:
-      nbComponents = 3;
-      pR = 2;
-      pG = 0;
-      pB = 1;
-      break;
-    case ORDER_BRG:
-      nbComponents = 3;
-      pR = 1;
-      pG = 2;
-      pB = 0;
-      break;
-    case ORDER_BGR:
-      nbComponents = 3;
-      pR = 2;
-      pG = 1;
-      pB = 0;
-      break;
-    case ORDER_GRBW:
-      nbComponents = 4;
-      pR = 1;
-      pG = 0;
-      pB = 2;
-      pW = 3;
-      break;
-    case ORDER_RGBW:
-      nbComponents = 4;
-      pR = 0;
-      pG = 1;
-      pB = 2;
-      pW = 3;
-      break;
-    case ORDER_RGBCCT:
-      nbComponents = 5;
-      pR = 0;
-      pG = 1;
-      pB = 2;
-      pW = 3;
-      pW2 = 4;
-      break;
-    }
-    initLedImpl(leds, pinsq, numStrips, maximum);
+    uint8_t nbComp, r, g, b, w, w2;
+    applyColorArrangement(cArr, nbComp, r, g, b, w, w2);
+    initled(leds, pinsq, sizes, numStrips, nbComp, r, g, b, w, w2);
   }
 
   /** Initialises the driver with uniform strip lengths; cArr defaults to ORDER_GRB. */
@@ -1532,41 +1473,10 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     */
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    // P4: store GPIO pins; allocate ping-pong waveform buffers; reset setup state so the
-    // PARLIO unit is reconfigured on the next showPixels() call.
+    // P4: store GPIO pins; allocate ping-pong waveform buffers.
+    // The PARLIO unit is configured lazily on the first showPixels() call.
     setPins(pinsq);
-
-    // Allocate buffers with proper error handling
-    if (!p4Buffer1) {
-      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
-          MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-      if (!p4Buffer1) {
-        ESP_LOGE(TAG, "Failed to allocate p4Buffer1 - out of memory");
-        initErrorOccurred = true;
-        return;
-      }
-    }
-    
-    if (!p4Buffer2) {
-      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
-          MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-      if (!p4Buffer2) {
-        ESP_LOGE(TAG, "Failed to allocate p4Buffer2 - out of memory");
-        // Free the first buffer to avoid memory leak
-        heap_caps_free(p4Buffer1);
-        p4Buffer1 = nullptr;
-        p4BufferActive = nullptr;
-        initErrorOccurred = true;
-        return;
-      }
-    }
-    
-    p4BufferActive = p4Buffer1;
-
-    // Signal that PARLIO hardware needs (re)configuring on the next showPixels().
-    // Setting -1 is sufficient: the topology comparison always triggers reconfiguration.
-    p4LastOutputs       = -1;
-    p4LastLedsPerOutput = -1;
+    if (!initTransferBuffers(this)) return;  // initErrorOccurred already set
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
     return;
 #endif

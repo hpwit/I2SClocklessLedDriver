@@ -122,9 +122,13 @@ void I2SClocklessLedDriver::deleteDriver() {
 #ifdef CONFIG_IDF_TARGET_ESP32P4
   #if HAS_PARLIO_DRIVER
   if (p4TxUnit != NULL) {
-    parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY);
-    parlio_tx_unit_disable(p4TxUnit);
-    parlio_del_tx_unit(p4TxUnit);
+    esp_err_t err;
+    if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK)
+      ESP_LOGE(TAG, "deleteDriver: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+    if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK)
+      ESP_LOGE(TAG, "deleteDriver: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+    if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK)
+      ESP_LOGE(TAG, "deleteDriver: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
     p4TxUnit = NULL;
   }
   #endif

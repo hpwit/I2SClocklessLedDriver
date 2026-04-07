@@ -80,7 +80,7 @@ The PARLIO approach was originally developed by **@troyhacks** and extended with
 
 ### `initLedImpl()` on P4
 
-On ESP32-P4, `initLedImpl()` stores the pins in `p4Pins[]` and calls `setBrightness()` to initialise the LUT tables, then returns immediately — no I2S peripheral or DMA buffer allocation takes place.  The PARLIO unit is created lazily on the first `showPixels()` call.
+On ESP32-P4, `initLedImpl()` stores the pins in `pins[]` and calls `setBrightness()` to initialise the LUT tables, then allocates the two ping-pong waveform buffers (`p4Buffer1`, `p4Buffer2`) in PSRAM.  The PARLIO unit is created lazily on the first `showPixels()` call.
 
 ### `updateDriver()` on P4
 
@@ -88,7 +88,7 @@ There is no DMA transfer to quiesce.  `updateDriver()` updates the pin array, st
 
 ### `deleteDriver()` on P4
 
-No I2S/DMA buffers were allocated, so nothing is freed.  The PARLIO unit itself (and its dual waveform buffers) is managed by `parlio_p4.cpp` as static state.
+`deleteDriver()` stops and deletes the PARLIO TX unit (if it was ever created) and frees the two ping-pong waveform buffers (`p4Buffer1`, `p4Buffer2`).  No I2S DMA descriptor rings are involved.
 
 ---
 
@@ -214,7 +214,7 @@ The two public entry points are `initled()` and `showPixels()`. Every other func
 
 There are currently many `initled()` overloads.  The canonical one — the lowest-level call that all others eventually reach — takes explicit component layout parameters:
 
-```
+```text
 initled(leds, pinsq, sizes[], numStrips, nbComponents, pR, pG, pB, pW, pW2)   ← canonical / main
   │
   ├─ populate stripSize[], totalLeds
@@ -223,7 +223,7 @@ initled(leds, pinsq, sizes[], numStrips, nbComponents, pR, pG, pB, pW, pW2)   �
 
 All other `initled()` variants are convenience wrappers that decode their arguments and delegate:
 
-```
+```text
 initled(leds, pinsq, sizes[], numStrips, cArr)         — decodes cArr → pR/pG/pB/pW/pW2 inline
 initled(leds, pinsq, numStrips, numLedPerStrip, cArr)  — uniform lengths; fills stripSize[], calls above
 initled(pinsq, numStrips, numLedPerStrip, cArr)        — no leds pointer (set externally)
@@ -234,7 +234,7 @@ The `cArr` decoder (a large switch-case) is duplicated across two of these overl
 
 `initLedImpl` does the actual work for all targets:
 
-```
+```text
 initLedImpl(leds, pinsq, numStrips, numLedPerStrip)
   │
   ├─ set members: leds, saveleds, numLedPerStrip, numStrips, offsetDisplay, linewidth
@@ -258,7 +258,7 @@ initLedImpl(leds, pinsq, numStrips, numLedPerStrip)
 
 #### `showPixels()` path
 
-```
+```text
 showPixels()  /  showPixels(WAIT)  /  showPixels(NO_WAIT)  /  showPixels(newleds)  / …
   │
   ├─ waitDisplay()          — if isDisplaying: block on waitDisp semaphore until ISR clears it
@@ -345,7 +345,7 @@ Convenience overloads that translate higher-level arguments into this form are u
 
 #### File layout after reorg
 
-```
+```text
 src/
   I2SClocklessLedDriver.h      — class + canonical initled + showPixels + dispatch shells
   I2SClocklessLedDriver.cpp    — updateDriver(), deleteDriver()
@@ -509,7 +509,7 @@ Names left unchanged because they describe the operation, not the hardware:
 
 `dmaBuffersTampon` (member variable, ESP32/S3) is a candidate for `transferBuffers` but low priority — member variable renames touch more code and are deferred to Phase 5.
 
-#### Phase 2 — Establish canonical `initled()` and move `ColorArrangement` out
+#### Phase 2 — Establish canonical `initled()` and move `ColorArrangement` out ✅ done
 
 *Goal:* The driver file contains hardware code only.  The `cArr` convenience layer is explicit and separate.  This phase is fully independent of hardware naming and can run in parallel with Phase 1.
 
@@ -520,7 +520,7 @@ Names left unchanged because they describe the operation, not the hardware:
 3. Replace the duplicated `switch(cArr)` blocks in the convenience overloads with `applyColorArrangement(…)`.
 4. In `I2SClocklessLedDriver.h`: `#include "colorarrangement.h"`.
 
-#### Phase 3 — Unify P4 function names (using the Phase 1 vocabulary)
+#### Phase 3 — Unify P4 function names (using the Phase 1 vocabulary) ✅ done
 
 *Goal:* `parlio_p4.h/.cpp` exposes `hwInit`, `initTransferBuffers`, `loadAndTranspose`, `hwStart`, `hwStop` — the same final names as the now-renamed ESP32/S3 code.  `hpwit` reads one set of names across all three platform files with no `i2s`/`parlio` prefix confusion.
 
