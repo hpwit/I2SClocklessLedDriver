@@ -114,7 +114,7 @@ Three FreeRTOS semaphores live on the driver object:
 | `semSync` | Frame-sync signal for `waitSync()` |
 | `waitDisp` | Lazy-created; used by `showPixels(NO_WAIT)`, `waitDisplay()`, and `updateDriver()` to wait for an in-flight transfer before proceeding |
 
-`wasWaitingtofinish` is a flag set by any caller that is about to block on `waitDisp`. The ISR checks the flag in `i2sStop()` and only calls `xSemaphoreGiveFromISR` when a waiter is present, preventing spurious semaphore count accumulation.
+`wasWaitingtofinish` is a flag set by any caller that is about to block on `waitDisp`. The ISR checks the flag in `hwStop()` and only calls `xSemaphoreGiveFromISR` when a waiter is present, preventing spurious semaphore count accumulation.
 
 All semaphore operations inside `i2sStop()` use `xSemaphoreGiveFromISR` + `portYIELD_FROM_ISR`, as required for ISR context.
 
@@ -135,7 +135,7 @@ In `LOOP` mode, `dmaBuffersTransposed[N+1]->next` points back to `dmaBuffersTran
 ## Adding a new target
 
 1. Add a `[env:your-target]` section in `platformio.ini` with the matching `CONFIG_IDF_TARGET_*` build flag.
-2. If the new target uses I2S/DMA: add an `i2sInit()` branch guarded by the new define, an ISR handler, and an `i2sStart()` branch — following the ESP32 or S3 pattern.
+2. If the new target uses I2S/DMA: add a `hwInit()` branch guarded by the new define, an ISR handler, and a `hwStart()` branch — following the ESP32 or S3 pattern.
 3. If the new target uses a different peripheral (like PARLIO on P4): create `src/parlio_<target>.h/.cpp`, declare the show function, include the header in the P4/top of `I2SClocklessLedDriver.h`, and add `#elif CONFIG_IDF_TARGET_<NEW>` branches in `setPins()`, `initLedImpl()`, and `showPixelsImpl()`.
 
 ---
@@ -250,9 +250,9 @@ initLedImpl(leds, pinsq, numStrips, numLedPerStrip)
   │
   └─ [ESP32 / ESP32-S3]
         setPins(pinsq)             → stores pins[]; routes GPIO through I2S signal matrix
-        i2sInit()                  → configures I2S/LCD_CAM registers + GDMA channel (S3)
+        hwInit()                   → configures I2S/LCD_CAM registers + GDMA channel (S3)
                                      or allocates interrupt handler (ESP32)
-        initDMABuffers()           → allocates dmaBuffersTampon[] ring (ping-pong)
+        initTransferBuffers()      → allocates dmaBuffersTampon[] ring (ping-pong)
                                      and optionally dmaBuffersTransposed[] (FULL_DMA_BUFFER)
 ```
 
@@ -292,13 +292,13 @@ showPixels()  /  showPixels(WAIT)  /  showPixels(NO_WAIT)  /  showPixels(newleds
              for buffNum 0 … nbDmaBuffer-2:
                loadAndTranspose(driver)        ← pre-fill ping-pong ring
                │  reads leds[], applies LUTs inline, calls transpose16x1Noinline2(), writes DMA buffer
-             i2sStart(dmaBuffersTampon[N])     ← arm and start DMA + I2S TX
+             hwStart(dmaBuffersTampon[N])      ← arm and start DMA + I2S TX
              if WAIT: xSemaphoreTake(sem)      ← block until ISR signals completion
 
              ISR (interruptHandler) — fires per DMA buffer completion:
                loadAndTranspose(driver)        ← fill next buffer while previous transmits
                when all LEDs done:
-                 i2sStop(driver)               ← stop I2S TX, signal sem / waitDisp / semSync
+                 hwStop(driver)                ← stop I2S TX, signal sem / waitDisp / semSync
 ```
 
 #### Summary: functions per layer (current state)
@@ -309,12 +309,12 @@ showPixels()  /  showPixels(WAIT)  /  showPixels(NO_WAIT)  /  showPixels(newleds
 | Colour decode | `switch(cArr)` inline in overload | ← same | ← same |
 | Common init | `initLedImpl` | ← same | ← same |
 | GPIO routing | `setPins` (I2S matrix) | `setPins` (LCD_CAM signals) | `setPins` (store only) |
-| HW peripheral init | `i2sInit` | `i2sInit` | inline in `show_parlio_p4` (lazy) |
-| Buffer allocation | `initDMABuffers` | `initDMABuffers` | inline in `initLedImpl` |
+| HW peripheral init | `hwInit` | `hwInit` | inline in `show_parlio_p4` (lazy) |
+| Buffer allocation | `initTransferBuffers` | `initTransferBuffers` | inline in `initLedImpl` |
 | Frame transpose | `loadAndTranspose` | `loadAndTranspose` | `create_transposed_led_output_optimized` |
 | LUT + wire-order | inline in `loadAndTranspose` | ← same | `rgbwBufferMapping` |
-| HW start | `i2sStart` | `i2sStart` | inline in `show_parlio_p4` |
-| HW stop / ISR | `i2sStop` + `interruptHandler` | ← same | none (synchronous) |
+| HW start | `hwStart` | `hwStart` | inline in `show_parlio_p4` |
+| HW stop / ISR | `hwStop` + `interruptHandler` | ← same | none (synchronous) |
 
 ---
 
@@ -485,17 +485,17 @@ Each phase is independently buildable and testable; no phase breaks the public A
 
 **Why renaming comes first:** Phase 1 renames the existing ESP32/S3 functions to hardware-neutral names.  Every later phase then writes code using the correct final names from day one — no double-rename, no transitional wrong-name step on P4, no extracted files that need immediate follow-up renaming.  The renaming decision is the vocabulary for the entire reorg.
 
-#### Phase 1 — Rename to hardware-neutral function names (ESP32/S3)
+#### Phase 1 — Rename to hardware-neutral function names (ESP32/S3) ✅ done
 
 *Goal:* Establish the final vocabulary before writing any new code.  Pure rename of existing ESP32/S3 functions — no logic change, no structural change.  All platforms will use these names after Phase 3.
 
-| Current name (ESP32/S3) | Why semantically wrong across targets | New name | Notes |
-|-------------------------|---------------------------------------|----------|-------|
+| Old name (ESP32/S3) | Why semantically wrong across targets | New name | Notes |
+|---------------------|---------------------------------------|----------|-------|
 | `i2sInit()` | No I2S on P4; uses PARLIO | `hwInit()` | "hw" = hardware peripheral, neutral |
 | `i2sStart()` | No I2S start register on P4 | `hwStart()` | Triggers DMA / PARLIO transfer |
 | `i2sStop()` | No I2S stop register on P4 | `hwStop()` | Waits for / signals transfer completion |
 | `initDMABuffers()` | P4 buffers are PSRAM waveform arrays, not DMA descriptors | `initTransferBuffers()` | Covers descriptor rings and flat waveform buffers |
-| `i2sResetDma()` | ESP32-D0 only; meaningless on S3 and P4 | keep as ESP32-D0 internal | Only used inside `i2s_esp32.h`; no cross-platform call |
+| `i2sResetDma()` | ESP32-D0 only; meaningless on S3 and P4 | keep as ESP32-D0 internal | Only used inside `hwInit()` on ESP32-D0; no cross-platform call |
 | `i2sResetFifo()` | Same | keep as ESP32-D0 internal | Same |
 
 Names left unchanged because they describe the operation, not the hardware:

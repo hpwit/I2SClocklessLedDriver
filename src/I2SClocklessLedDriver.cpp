@@ -109,7 +109,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   this->pW = pW;
   this->pW2 = pW2;
 
-  initDMABuffers();  // needs nbComponents and numLedPerStrip for buffer sizing
+  initTransferBuffers();  // needs nbComponents and numLedPerStrip for buffer sizing
 
   setBrightness(brightness);  // allocate/free gamma maps based on new pW
 

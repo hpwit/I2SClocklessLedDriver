@@ -15,7 +15,7 @@
 
 ### Where code lives
 
-```
+```text
 src/              Library source
   I2SClocklessLedDriver.h    Main class + ESP32/S3 I2S implementation
   I2SClocklessLedDriver.cpp  updateDriver() / deleteDriver()
@@ -64,11 +64,21 @@ Push additional commits to your branch — GitHub keeps the PR up-to-date automa
 
 The 🐰 (CodeRabbit) reviews each commit — address its recommendations before requesting a merge.
 
+Example of the flow of a PR in github:
+
+![PR flow](PRflow.png)
+
+In this example:
+
+- a branch called esp32-p4-support is added on the main branch
+- a few commits have been done
+- see [this PR](https://github.com/hpwit/I2SClocklessLedDriver/pull/54) : Coderabbit has done it's reviews and additional commits are done
+
 ### Merging a PR
 
 Before merging, ask CodeRabbit:
 
-```
+```text
 @coderabbitai, I am about to merge this PR. Please produce three outputs:
 
 1. **PR review** — in-depth review of all commits: a concise summary of what changed
@@ -155,7 +165,7 @@ AI-generated code must be documented to the same standard as human-written code.
 Using AI assistance is fine. As the contributor, you are still responsible for the code:
 
 - **Understand it** — do not accept AI output because it "seems to work"
-- **Review changes to existing code** — AI edits can silently drop comments or break subtle logic; pay particular attention to ISR-path functions (`loadAndTranspose`, `i2sStop`, `interruptHandler`)
+- **Review changes to existing code** — AI edits can silently drop comments or break subtle logic; pay particular attention to ISR-path functions (`loadAndTranspose`, `hwStop`, `interruptHandler`)
 - **Verify platform guards** — AI often forgets `#ifdef CONFIG_IDF_TARGET_*` when adding a new branch; always check that ESP32, S3, and P4 each compile
 
 Mark larger AI-generated sections with a comment:
@@ -204,7 +214,7 @@ Mistral's vibe coding approach works best via [Le Chat](https://chat.mistral.ai)
 > Model: **Opus 4.6** / **Mistral Large**
 
 Prompt pattern:
-```
+```text
 Add support for CONFIG_IDF_TARGET_ESP32XX following the pattern used for ESP32-P4.
 The peripheral is [describe: I2S / PARLIO / other].
 Add #ifdef guards in setPins(), initLedImpl(), showPixelsImpl().
@@ -221,7 +231,7 @@ Update platformio.ini, docs/developer/developer.md, docs/enduser/enduser.md.
 > Model: **Sonnet 4.6** / **Codestral**
 
 Prompt pattern:
-```
+```text
 Add an initled() overload that accepts [describe new parameters].
 It must call the canonical initled(leds, pinsq, sizes[], numStrips,
 nbComponents, pR, pG, pB, pW, pW2) after translating its arguments.
@@ -236,8 +246,8 @@ Do not change initLedImpl() or any platform-specific code.
 > Model: **Opus 4.6** / **Mistral Large**
 
 Prompt pattern:
-```
-In [loadAndTranspose / interruptHandler / i2sStop], the following behaviour
+```text
+In [loadAndTranspose / interruptHandler / hwStop], the following behaviour
 is wrong: [describe symptom, reproduce steps, any decoded stack trace].
 Relevant members: [list].
 Fix must be ISR-safe (no malloc, no blocking FreeRTOS calls).
@@ -252,7 +262,7 @@ Do not change the function signature.
 > Model: **Sonnet 4.6** / **Mistral Small**
 
 Prompt pattern:
-```
+```text
 Update docs/enduser/enduser.md and/or docs/developer/developer.md to reflect:
 [describe what changed].
 Rules: end-user doc = usage only, no internals; developer doc = decisions and
@@ -267,7 +277,7 @@ patterns not obvious from source. Update in place — do not duplicate existing 
 > Model: **Opus 4.6** / **Mistral Large**
 
 Prompt pattern:
-```
+```text
 The ESP32 crashes with the following decoded stack trace:
 [paste trace]
 The crash happens after [describe steps].

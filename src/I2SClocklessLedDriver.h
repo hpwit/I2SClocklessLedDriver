@@ -492,34 +492,38 @@ class I2SClocklessLedDriver {
       if (!redMap) {
         ESP_LOGE(TAG, "Failed to allocate redMap!");
         initErrorOccurred = true;
+        initSuccess = false;
         return;
       }
     }
-    
+
     if (!greenMap) {
       greenMap = (uint8_t*)malloc(256);
       if (!greenMap) {
         ESP_LOGE(TAG, "Failed to allocate greenMap!");
         initErrorOccurred = true;
+        initSuccess = false;
         return;
       }
     }
-    
+
     if (!blueMap) {
       blueMap = (uint8_t*)malloc(256);
       if (!blueMap) {
         ESP_LOGE(TAG, "Failed to allocate blueMap!");
         initErrorOccurred = true;
+        initSuccess = false;
         return;
       }
     }
-    
+
     if (pW != UINT8_MAX) {
       if (!whiteMap) {
         whiteMap = (uint8_t*)malloc(256);
         if (!whiteMap) {
           ESP_LOGE(TAG, "Failed to allocate whiteMap!");
           initErrorOccurred = true;
+          initSuccess = false;
           return;
         }
       }
@@ -527,13 +531,14 @@ class I2SClocklessLedDriver {
       free(whiteMap);
       whiteMap = nullptr;
     }
-    
+
     if (pW2 != UINT8_MAX) {
       if (!white2Map) {
         white2Map = (uint8_t*)malloc(256);
         if (!white2Map) {
           ESP_LOGE(TAG, "Failed to allocate white2Map!");
           initErrorOccurred = true;
+          initSuccess = false;
           return;
         }
       }
@@ -580,7 +585,7 @@ class I2SClocklessLedDriver {
     setBrightness(brightness);
   }
 
-  void i2sInit() {
+  void hwInit() {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     periph_module_enable(PERIPH_LCD_CAM_MODULE);
     periph_module_reset(PERIPH_LCD_CAM_MODULE);
@@ -620,7 +625,7 @@ class I2SClocklessLedDriver {
     LCD_CAM.lcd_misc.lcd_bk_en = 1;
   // -- Create a semaphore to block execution until all the controllers are done
 
-  // IDF5.5: 🌙 i2sInit: .isr_cache_safe=true results in Cache disabled but cached memory region accessed crash
+  // IDF5.5: 🌙 hwInit: .isr_cache_safe=true results in Cache disabled but cached memory region accessed crash
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     gdma_channel_alloc_config_t dmaChanConfig = {.sibling_chan = NULL, .direction = GDMA_CHANNEL_DIRECTION_TX, .flags = {.reserve_sibling = 0}};
     // .isr_cache_safe= true}};
@@ -718,7 +723,7 @@ class I2SClocklessLedDriver {
     }
   }
 
-  void initDMABuffers() {
+  void initTransferBuffers() {
 /*
 dmaBuffersTampon[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
 dmaBuffersTampon[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
@@ -812,7 +817,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     transpose = false;
     // wasWaitingtofinish = true;
     //  Serial.printf(" was:%d\n",wasWaitingtofinish);
-    i2sStart(dmaBuffersTransposed[0]);
+    hwStart(dmaBuffersTransposed[0]);
 
     if (dispmode == WAIT) {
       isWaiting = true;
@@ -1243,7 +1248,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     dmaBufferActive = nbDmaBuffer - 1;
     ledToDisplayOut = 0;
     isDisplaying = true;
-    i2sStart(dmaBuffersTampon[nbDmaBuffer]);
+    hwStart(dmaBuffersTampon[nbDmaBuffer]);
 
     if (displayMode == WAIT) {
       isWaiting = true;
@@ -1566,8 +1571,8 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     return;
 #endif
     setPins(pinsq);
-    i2sInit();
-    initDMABuffers();
+    hwInit();
+    initTransferBuffers();
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   }
 
@@ -1637,7 +1642,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 #endif
   }
   /*
-      void   i2sStop()
+      void   hwStop()
       {
 
           esp_intr_disable(intrHandle);
@@ -1702,7 +1707,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   }
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-  void i2sStart(I2SClocklessLedDriverDMABuffer* startBuffer) {
+  void hwStart(I2SClocklessLedDriverDMABuffer* startBuffer) {
   #ifdef CONFIG_IDF_TARGET_ESP32S3
 
     LCD_CAM.lcd_user.lcd_start = 0;
@@ -1764,7 +1769,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
   // static void IRAM_ATTR interruptHandler(void *arg);
 };
-static void IRAM_ATTR i2sStop(I2SClocklessLedDriver* cont) {
+static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 
   // gdma_disconnect(dmaChan);
@@ -1815,8 +1820,8 @@ static IRAM_ATTR bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event
   I2SClocklessLedDriver* cont = (I2SClocklessLedDriver*)userData;
 
   if (!cont->enableDriver) {
-    // cont->i2sStop(cont);
-    i2sStop(cont);
+    // cont->hwStop(cont);
+    hwStop(cont);
     return true;
   }
 
@@ -1840,7 +1845,7 @@ static IRAM_ATTR bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event
     }
     cont->ledToDisplayOut = cont->ledToDisplayOut + 1;
     if (cont->ledToDisplay >= cont->numLedPerStrip + cont->nbDmaBuffer + 1) {
-      i2sStop(cont);
+      hwStop(cont);
     }
   } else {
     if (cont->framesync) {
@@ -1861,8 +1866,8 @@ static void IRAM_ATTR interruptHandler(void* arg) {
 
   if (!cont->enableDriver) {
     REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
-    // ((I2SClocklessLedDriver *)arg)->i2sStop();
-    i2sStop(cont);
+    // ((I2SClocklessLedDriver *)arg)->hwStop();
+    hwStop(cont);
     return;
   }
   if (GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ST_S, I2S_OUT_EOF_INT_ST_S)) {
@@ -1890,8 +1895,8 @@ static void IRAM_ATTR interruptHandler(void* arg) {
   }
 
   if (GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ST_S, I2S_OUT_TOTAL_EOF_INT_ST_S)) {
-    // ((I2SClocklessLedDriver *)arg)->i2sStop();
-    i2sStop(cont);
+    // ((I2SClocklessLedDriver *)arg)->hwStop();
+    hwStop(cont);
     if (cont->isWaiting) {
       portBASE_TYPE hpTaskAwoken = 0;
       xSemaphoreGiveFromISR(cont->sem, &hpTaskAwoken);

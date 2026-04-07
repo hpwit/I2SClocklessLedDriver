@@ -239,6 +239,9 @@ static void create_transposed_led_output_optimized(
         0b1110111011101000, 0b1110111011101110,
     };
 
+    // Not guarded with std::call_once: show_parlio_p4 is always invoked from a
+    // single task (no concurrent calls), and the initialisation is idempotent —
+    // a torn write produces the same final values, so a race is harmless here.
     if (!waveform_cache_initialized) {
         for (int i = 0; i < 256; ++i) {
             const uint16_t p1 = bitpatterns[i >> 4];   // high nibble → ticks 0-15
@@ -402,14 +405,28 @@ uint8_t __attribute__((hot)) show_parlio_p4(
         driver->p4Config.flags.invert_valid_out   = 0;
 
         if (driver->p4TxUnit != NULL) {
-            ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY));
-            ESP_ERROR_CHECK(parlio_tx_unit_disable(driver->p4TxUnit));
-            ESP_ERROR_CHECK(parlio_del_tx_unit(driver->p4TxUnit));
+            esp_err_t err;
+            if ((err = parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY)) != ESP_OK)
+                ESP_LOGE(TAG, "parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+            if ((err = parlio_tx_unit_disable(driver->p4TxUnit)) != ESP_OK)
+                ESP_LOGE(TAG, "parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+            if ((err = parlio_del_tx_unit(driver->p4TxUnit)) != ESP_OK)
+                ESP_LOGE(TAG, "parlio_del_tx_unit failed: %s", esp_err_to_name(err));
             driver->p4TxUnit = NULL;
         }
 
-        ESP_ERROR_CHECK(parlio_new_tx_unit(&driver->p4Config, &driver->p4TxUnit));
-        ESP_ERROR_CHECK(parlio_tx_unit_enable(driver->p4TxUnit));
+        esp_err_t err;
+        if ((err = parlio_new_tx_unit(&driver->p4Config, &driver->p4TxUnit)) != ESP_OK) {
+            ESP_LOGE(TAG, "parlio_new_tx_unit failed: %s", esp_err_to_name(err));
+            driver->p4TxUnit = NULL;
+            return 3;
+        }
+        if ((err = parlio_tx_unit_enable(driver->p4TxUnit)) != ESP_OK) {
+            ESP_LOGE(TAG, "parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
+            parlio_del_tx_unit(driver->p4TxUnit);
+            driver->p4TxUnit = NULL;
+            return 3;
+        }
 
         driver->p4LastOutputs       = outputs;
         driver->p4LastLedsPerOutput = max_leds;
