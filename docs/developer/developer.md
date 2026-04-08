@@ -24,7 +24,7 @@ Each LED bit is encoded as 3 I2S clock ticks: `100` = 0-bit, `110` = 1-bit. The 
 
 ### Ping-pong mode (default)
 
-Two small DMA buffers (`dmaBuffersTampon[0..N+1]`) are filled one at a time by the ISR. Each ISR call transposes and loads the next LED into the currently-idle buffer. This uses minimal RAM but requires an ISR call per LED column.
+Two small DMA buffers (`transferBuffers[0..N+1]`) are filled one at a time by the ISR. Each ISR call transposes and loads the next LED into the currently-idle buffer. This uses minimal RAM but requires an ISR call per LED column.
 
 The ISR (`interruptHandler` on S3, `interruptHandler` on ESP32) is `IRAM_ATTR`-placed and only uses ISR-safe FreeRTOS primitives.
 

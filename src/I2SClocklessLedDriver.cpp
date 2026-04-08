@@ -149,8 +149,8 @@ void I2SClocklessLedDriver::deleteDriver() {
     p4Buffer2 = nullptr;
   }
   p4BufferActive = nullptr;
-  initSuccess = false;
 #endif
+  initSuccess = false;
 
 #ifdef FULL_DMA_BUFFER
   if (dmaBuffersTransposed) {
