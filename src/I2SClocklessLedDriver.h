@@ -382,7 +382,7 @@ class I2SClocklessLedDriver {
   parlio_tx_unit_config_t p4Config  = {};
   #endif
 
-  // Topology-change detection: force PARLIO reconfiguration when these differ.
+  // Topology cache: hwInit() skips reconfiguration when these match current values.
   int  p4LastOutputs      = -1;
   int  p4LastLedsPerOutput = -1;
 
@@ -1191,14 +1191,9 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     }
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    if (::hwInit(this)) {
-      // PARLIO unit was (re)configured — skip this frame as a warm-up.
-      isDisplaying = false;
-      return;
-    }
-    loadAndTranspose(this);
-    hwStart(this);
-    hwStop(this);
+    ::loadAndTranspose(this);
+    ::hwStart(this);
+    ::hwStop(this);
     isDisplaying = false;
     return;
 #endif
@@ -1453,6 +1448,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     }
 #endif
     setBrightness(255);
+    if (initErrorOccurred) return;  // LUT allocation failed — stop early
     /*
     // dmaBufferCount = 2;
     this->leds = leds;
@@ -1475,9 +1471,9 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     */
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    // P4: store GPIO pins; allocate ping-pong waveform buffers.
-    // The PARLIO unit is configured lazily on the first showPixels() call.
+    // P4: store GPIO pins, configure PARLIO unit, allocate ping-pong waveform buffers.
     setPins(pinsq);
+    ::hwInit(this);
     if (!::initTransferBuffers(this)) return;  // initErrorOccurred already set
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
     return;

@@ -34,13 +34,11 @@ class I2SClocklessLedDriver;
 bool initTransferBuffers(I2SClocklessLedDriver* driver);
 
 /**
- * hwInit — lazily configure the PARLIO TX unit.  Called at the start of every
- * showPixels() on P4; only reconfigures when the number of outputs or
- * LEDs-per-output has changed.
- * @return true  = hardware was (re)configured — skip this frame (warm-up).
- *         false = topology unchanged — proceed with loadAndTranspose / hwStart / hwStop.
+ * hwInit — configure (or reconfigure) the PARLIO TX unit.  Called from
+ * initLedImpl() and updateDriver() on P4.  No-op if the topology (number of
+ * outputs and LEDs-per-output) has not changed since the last call.
  */
-bool hwInit(I2SClocklessLedDriver* driver);
+void hwInit(I2SClocklessLedDriver* driver);
 
 /**
  * loadAndTranspose — bit-transpose the raw LED buffer into the active ping-pong

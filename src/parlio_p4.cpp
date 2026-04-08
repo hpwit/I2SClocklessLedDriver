@@ -352,17 +352,14 @@ bool initTransferBuffers(I2SClocklessLedDriver* driver) {
             return false;
         }
     }
-    driver->p4BufferActive      = driver->p4Buffer1;
-    // Force hwInit to (re)configure the PARLIO unit on the first showPixels() call.
-    driver->p4LastOutputs       = -1;
-    driver->p4LastLedsPerOutput = -1;
+    driver->p4BufferActive = driver->p4Buffer1;
     return true;
 }
 
-bool hwInit(I2SClocklessLedDriver* driver) {
+void hwInit(I2SClocklessLedDriver* driver) {
     #if !HAS_PARLIO_DRIVER
     ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
-    return true;  // treat as warm-up / skip frame
+    return;
     #endif
 
     uint8_t outputs = driver->numStrips;
@@ -372,7 +369,7 @@ bool hwInit(I2SClocklessLedDriver* driver) {
 
     // No topology change — nothing to do.
     if ((int)outputs == driver->p4LastOutputs && (int)max_leds == driver->p4LastLedsPerOutput)
-        return false;
+        return;
 
     // Data width: smallest power-of-2 that covers all outputs.
     driver->p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
@@ -424,13 +421,13 @@ bool hwInit(I2SClocklessLedDriver* driver) {
     if ((err = parlio_new_tx_unit(&driver->p4Config, &driver->p4TxUnit)) != ESP_OK) {
         ESP_LOGE(TAG, "hwInit: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
         driver->p4TxUnit = NULL;
-        return true;  // skip frame — hardware is not ready
+        return;
     }
     if ((err = parlio_tx_unit_enable(driver->p4TxUnit)) != ESP_OK) {
         ESP_LOGE(TAG, "hwInit: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
         parlio_del_tx_unit(driver->p4TxUnit);
         driver->p4TxUnit = NULL;
-        return true;  // skip frame — hardware is not ready
+        return;
     }
 
     driver->p4LastOutputs       = outputs;
@@ -445,9 +442,8 @@ bool hwInit(I2SClocklessLedDriver* driver) {
         ESP_LOGD(TAG, "  Output %u = GPIO %d %s",
                  (unsigned)(i + 1), (int)driver->p4Config.data_gpio_nums[i], status);
     }
-    ESP_LOGI(TAG, "PARLIO reconfigured (%u outputs, %u LEDs/output) — skipping warm-up frame",
+    ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)",
              (unsigned)outputs, (unsigned)max_leds);
-    return true;  // warm-up frame: give the hardware one frame to settle
 }
 
 void __attribute__((hot)) loadAndTranspose(I2SClocklessLedDriver* driver) {

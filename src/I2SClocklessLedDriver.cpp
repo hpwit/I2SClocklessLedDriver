@@ -31,8 +31,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   }
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-  // P4: no DMA in flight to quiesce.  Update state; the PARLIO unit reconfigures
-  // lazily on the next showPixels() call when it detects the topology change.
+  // P4: no DMA in flight to quiesce.  Update topology, reconfigure PARLIO, update LUTs.
   this->numStrips = numStrips;
   totalLeds = 0;
   firstIndexPerOutput[0] = 0;
@@ -52,6 +51,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   nbDmaBuffer   = dmaBuffer;
   this->nbComponents = nbComponents;
   this->pR = pR;  this->pG = pG;  this->pB = pB;  this->pW = pW;  this->pW2 = pW2;
+  ::hwInit(this);
   setBrightness(brightness);
   ESP_LOGD(TAG, "updateDriver (P4) %d x %d", numStrips, this->numLedPerStrip);
   return;
