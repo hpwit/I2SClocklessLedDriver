@@ -200,7 +200,7 @@ Mistral's vibe coding approach works best via [Le Chat](https://chat.mistral.ai)
 | Model | Use when |
 |-------|----------|
 | **Mistral Large** | Complex reasoning, architectural questions, cross-file analysis |
-| **Codestral** | Code generation and completion — optimised for code |
+| **Codestral** | Code generation and completion — optimized for code |
 | **Mistral Small** | Fast iteration, quick Q&A, low-cost tasks |
 | **Pixtral** | When you need to attach a screenshot or image (e.g. schematic, UI mockup) |
 

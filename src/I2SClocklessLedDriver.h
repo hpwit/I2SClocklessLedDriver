@@ -243,7 +243,9 @@ static void transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint8_t numStr
 uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb); #endif
 */
 
+#ifndef CONFIG_IDF_TARGET_ESP32P4
 static void loadAndTranspose(I2SClocklessLedDriver* driver);
+#endif
 
 #include "colorarrangement.h"
 
@@ -1189,7 +1191,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     }
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    if (hwInit(this)) {
+    if (::hwInit(this)) {
       // PARLIO unit was (re)configured — skip this frame as a warm-up.
       isDisplaying = false;
       return;
@@ -1476,7 +1478,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     // P4: store GPIO pins; allocate ping-pong waveform buffers.
     // The PARLIO unit is configured lazily on the first showPixels() call.
     setPins(pinsq);
-    if (!initTransferBuffers(this)) return;  // initErrorOccurred already set
+    if (!::initTransferBuffers(this)) return;  // initErrorOccurred already set
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
     return;
 #endif
@@ -1679,6 +1681,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
   // static void IRAM_ATTR interruptHandler(void *arg);
 };
+#ifndef CONFIG_IDF_TARGET_ESP32P4
 static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 
@@ -1713,6 +1716,7 @@ static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
   }
   if (hpTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
 }
+#endif  // !CONFIG_IDF_TARGET_ESP32P4
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 
@@ -1893,6 +1897,7 @@ static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint
 #endif
 }
 
+#ifndef CONFIG_IDF_TARGET_ESP32P4
 static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_t *ledt, uint16_t *sizes, uint8_t num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t
                                                                        // *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb)
 {
@@ -1977,5 +1982,6 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   if (driver->pW != UINT8_MAX) transpose16x1Noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8, driver->numStrips);
   if (driver->pW2 != UINT8_MAX) transpose16x1Noinline2(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8, driver->numStrips);
 }
+#endif  // !CONFIG_IDF_TARGET_ESP32P4
 
-#endif
+#endif  // I2S_CLOCKLESS_DRIVER_H
