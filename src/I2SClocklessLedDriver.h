@@ -378,16 +378,11 @@ class I2SClocklessLedDriver {
   uint32_t firstIndexPerOutput[MAX_PINS] = {};
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-
   // PARLIO peripheral handle and configuration (only available in ESP-IDF v5.1+).
   #if HAS_PARLIO_DRIVER
   parlio_tx_unit_handle_t p4TxUnit = NULL;
   parlio_tx_unit_config_t p4Config = {};
   #endif
-
-  // Topology cache: hwInit() skips reconfiguration when these match current values.
-  int p4LastOutputs = -1;
-  int p4LastLedsPerOutput = -1;
 
   // Ping-pong waveform buffers — allocated in initLedImpl(), freed in deleteDriver().
   uint16_t* p4Buffer1 = nullptr;
@@ -704,7 +699,7 @@ class I2SClocklessLedDriver {
     */
     esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3, &interruptHandler, this, &intrHandle);  // 🌙 | ESP_INTR_FLAG_IRAM removed to avoid Cache Disabled but Cached Memory Region Accessed
 #elif CONFIG_IDF_TARGET_ESP32P4
-  // Configure (or reconfigure) the PARLIO TX unit.  No-op if topology unchanged.
+  // Configure (or reconfigure) the PARLIO TX unit.
   #if !HAS_PARLIO_DRIVER
     ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
     initErrorOccurred = true;
@@ -713,11 +708,12 @@ class I2SClocklessLedDriver {
 
     {
       uint8_t outputs = numStrips;
-      if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH) outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
+      if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH) {
+        ESP_LOGE(TAG, "hwInit: numStrips (%u) exceeds SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH (%u)", outputs, SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH);
+        initErrorOccurred = true;
+        return;
+      }
       const uint16_t max_leds = numLedPerStrip;
-
-      // Topology unchanged — nothing to do.
-      if ((int)outputs == p4LastOutputs && (int)max_leds == p4LastLedsPerOutput) return;
 
       p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
       if (outputs <= 1)
@@ -781,9 +777,6 @@ class I2SClocklessLedDriver {
         initErrorOccurred = true;
         return;
       }
-
-      p4LastOutputs = outputs;
-      p4LastLedsPerOutput = max_leds;
 
       ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)", (unsigned)outputs, (unsigned)max_leds);
     }
@@ -1292,7 +1285,6 @@ class I2SClocklessLedDriver {
     }
 
     if (!initSuccess) {
-      // Silent return in hot path - initialization errors should be caught earlier
       return;
     }
 
@@ -1356,9 +1348,12 @@ class I2SClocklessLedDriver {
       isDisplaying = true;
     }
 #elif CONFIG_IDF_TARGET_ESP32P4
-    loadAndTranspose();
-    hwStart();
-    hwStop();
+    if (loadAndTranspose()) {
+      hwStart();
+      hwStop();
+    }
+    // If loadAndTranspose fails (buffer too small) the frame is skipped silently;
+    // the error was already logged inside loadAndTranspose().
     isDisplaying = false;
 #endif
   }
@@ -1762,7 +1757,7 @@ class I2SClocklessLedDriver {
 #endif
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-  void loadAndTranspose();
+  bool loadAndTranspose();
   void hwStart();
   void hwStop();
 #endif

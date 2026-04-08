@@ -307,7 +307,7 @@ static const parlio_transmit_config_t transmit_config = {
 // I2SClocklessLedDriver P4 method bodies
 // ---------------------------------------------------------------------------
 
-inline void __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
+inline bool __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
     uint8_t outputs = numStrips;
     if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
         outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
@@ -322,13 +322,14 @@ inline void __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
                  (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES,
                  (unsigned)max_leds, (unsigned)components,
                  (unsigned)p4Config.data_width);
-        return;
+        return false;
     }
 
     create_transposed_led_output_optimized(
         this, leds, p4BufferActive,
         stripSize, outputs, components,
         pR, pG, pB, pW, pW2);
+    return true;
 }
 
 inline void I2SClocklessLedDriver::hwStart() {
@@ -346,38 +347,24 @@ inline void I2SClocklessLedDriver::hwStart() {
     const uint8_t  num_chunks         = (uint8_t)((max_leds + max_leds_per_chunk - 1u) / max_leds_per_chunk);
     const size_t   chunk_stride       = (size_t)max_leds_per_chunk * bytes_per_pixel;
 
-    uint32_t       chunk_bits[4];
-    const uint8_t* chunk_ptrs[4];
     uint32_t leds_remaining = max_leds;
-    uint32_t leds_in_chunk;
-
-    leds_in_chunk   = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
-    chunk_bits[0]   = leds_in_chunk * bits_per_pixel;
-    chunk_ptrs[0]   = (const uint8_t*)p4BufferActive;
-    leds_remaining -= leds_in_chunk;
-
-    leds_in_chunk   = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
-    chunk_bits[1]   = leds_in_chunk * bits_per_pixel;
-    chunk_ptrs[1]   = chunk_ptrs[0] + chunk_stride;
-    leds_remaining -= leds_in_chunk;
-
-    leds_in_chunk   = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
-    chunk_bits[2]   = leds_in_chunk * bits_per_pixel;
-    chunk_ptrs[2]   = chunk_ptrs[1] + chunk_stride;
-    leds_remaining -= leds_in_chunk;
-
-    chunk_bits[3]   = leds_remaining * bits_per_pixel;
-    chunk_ptrs[3]   = chunk_ptrs[2] + chunk_stride;
+    const uint8_t* chunk_ptr = (const uint8_t*)p4BufferActive;
 
     // Swap ping-pong: next loadAndTranspose writes to the idle buffer.
     p4BufferActive = (p4BufferActive == p4Buffer1) ? p4Buffer2 : p4Buffer1;
 
-    // Queue chunks for non-blocking PARLIO TX.
-    for (int i = 0; i < num_chunks && i < 4; ++i) {
-        if (chunk_bits[i] > 0) {
+    // Queue chunks for non-blocking PARLIO TX - compute and transmit on the fly
+    for (uint8_t i = 0; i < num_chunks; ++i) {
+        uint32_t leds_in_chunk = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
+        uint32_t chunk_bits = leds_in_chunk * bits_per_pixel;
+        
+        if (chunk_bits > 0) {
             ESP_ERROR_CHECK(parlio_tx_unit_transmit(
-                p4TxUnit, chunk_ptrs[i], chunk_bits[i], &transmit_config));
+                p4TxUnit, chunk_ptr, chunk_bits, &transmit_config));
         }
+        
+        chunk_ptr += chunk_stride;
+        leds_remaining -= leds_in_chunk;
     }
 }
 

@@ -2,7 +2,7 @@
 
 This document tracks the ongoing repository reorganization effort to unify platform-specific code (ESP32-D0, ESP32-S3, ESP32-P4) under a common vocabulary and clean architecture.
 
-**Status: Phases 1, 2, 3, 4, 5 completed. Phases 6–8 pending.**
+**Status: Phases 1, 2, 3, 4, 5, 6 completed. Phases 7–9 pending.**
 
 ---
 
@@ -136,8 +136,8 @@ src/
   colorarrangement.h           — ColorArrangement enum + applyColorArrangement()  ✅ done
   i2s_esp32_impl.h             — ESP32-D0:  out-of-class method bodies for hwInit,
   │                               initTransferBuffers, loadAndTranspose, hwStart, hwStop,
-  │                               interruptHandler, transpose16x1Noinline2  (Phase 6)
-  i2s_esp32s3_impl.h           — ESP32-S3:  same method names, different register code  (Phase 6)
+  │                               interruptHandler, transpose16x1Noinline2  (Phase 7)
+  i2s_esp32s3_impl.h           — ESP32-S3:  same method names, different register code  (Phase 7)
   parlio_p4_impl.h             — ESP32-P4:  out-of-class method bodies  ✅ done (Phase 5)
   pixeltypes.h                 — unchanged
   framebuffer.h                — unchanged
@@ -330,7 +330,7 @@ Names left unchanged because they describe the operation, not the hardware:
 | Call site in `showPixelsImpl` | `show_parlio_p4(this, pins, …)` | `hwInit(this)` + `loadAndTranspose(this)` + `hwStart(this)` + `hwStop(this)` |
 | Call site in `initLedImpl` (P4) | inline buffer alloc | `initTransferBuffers(this)` |
 
-P4-specific class members keep their `p4` prefix (`p4TxUnit`, `p4Config`, `p4Buffer1/2`, `p4BufferActive`, `p4LastOutputs`, `p4LastLedsPerOutput`) — the prefix clearly marks them as PARLIO implementation details, not shared state.
+P4-specific class members keep their `p4` prefix (`p4TxUnit`, `p4Config`, `p4Buffer1/2`, `p4BufferActive`) — the prefix clearly marks them as PARLIO implementation details, not shared state.
 
 ### Phase 4 — Move P4 hardware init from `showPixels` to `initled` ✅ done
 
@@ -342,7 +342,7 @@ Changes:
 1. In `initLedImpl` (P4 branch): add `::hwInit(this)` before `::initTransferBuffers(this)` — same position as ESP32/S3.
 2. In `updateDriver()` (P4 branch): add `::hwInit(this)` after updating topology — mirrors how ESP32/S3 `updateDriver()` reconfigures I2S when strip count or LED count changes.
 3. In `showPixelsImpl` (P4 branch): remove the `if (::hwInit(this)) { … return; }` warm-up guard.  P4's block reduces to: `::loadAndTranspose(this); ::hwStart(this); ::hwStop(this); isDisplaying = false;`
-4. Remove members that only existed to support lazy init: `forceParlioReconfig` (if present), `p4LastOutputs`, `p4LastLedsPerOutput`.
+4. Remove members that only existed to support lazy init: `forceParlioReconfig` (if present), `p4LastOutputs`, `p4LastLedsPerOutput`, `p4LastPins` — all removed during Phase 4/5 implementation.
 
 Result: `initLedImpl` and `updateDriver` become structurally identical across all three targets.  `showPixelsImpl` P4 branch is now three lines + `isDisplaying = false`, matching the logical shape of the ESP32/S3 path.
 
@@ -362,15 +362,37 @@ Changes:
 Result: all three targets call the same names with the same syntax.  The `::` workaround introduced in Phase 3 is gone.  `I2SClocklessLedDriver.h` bottom section becomes:
 ```cpp
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-  #include "i2s_esp32s3_impl.h"   // added by Phase 6
+  #include "i2s_esp32s3_impl.h"   // added by Phase 7
 #elif defined(CONFIG_IDF_TARGET_ESP32)
-  #include "i2s_esp32_impl.h"     // added by Phase 6
+  #include "i2s_esp32_impl.h"     // added by Phase 7
 #elif defined(CONFIG_IDF_TARGET_ESP32P4)
   #include "parlio_p4_impl.h"     // ✅ this phase
 #endif
 ```
 
-### Phase 6 — Extract ESP32/S3 method bodies to platform impl headers (pending)
+### Phase 6 — Unify `updateDriver()` ✅ done
+
+*Goal:* Remove the P4-specific `#ifdef` block from `updateDriver()` so it mirrors `initLedImpl` — one common body, platform differences hidden inside `deleteDriver()`, `hwInit()`, and `initTransferBuffers()`.
+
+Changes made:
+1. `deleteDriver()` on ESP32/S3 now tears down hardware before freeing buffers:
+   - S3: `gdma_disconnect(dmaChan)` + `gdma_del_channel(dmaChan)` — prevents the DMA engine from accessing freed memory; makes `hwInit()` safe to call again.
+   - ESP32: `esp_intr_free(intrHandle)` — releases the I2S interrupt handler so it can be reinstalled.
+2. `updateDriver()` is now a single unified body matching `initLedImpl`:
+   ```
+   validate args
+   compute newNumLedPerStrip          ← before deleteDriver sees the old value
+   if isDisplaying: wait (semaphore)  ← no-op on P4; isDisplaying is always false there
+   deleteDriver()                     ← all platforms: tears down HW + frees buffers
+   update topology (common)
+   setShowDelay() + setPins()
+   hwInit()                           ← all platforms: reconfigures HW peripheral
+   initTransferBuffers()              ← all platforms: allocates buffers
+   setBrightness() + initSuccess
+   ```
+3. Fixed two pre-existing P4 bugs found during analysis: missing `setShowDelay()` call and inline `pins[i] = pinsq[i]` instead of `setPins(pinsq)`.
+
+### Phase 7 — Extract ESP32/S3 method bodies to platform impl headers (pending)
 
 *Goal:* `I2SClocklessLedDriver.h` shrinks to class declaration + method declarations + thin dispatch shells.  The large ESP32/S3 function bodies move to `_impl.h` files that are `#include`d back after the class definition closes, following the pattern established by Phase 5.  **ESP32/S3 functions stay as class methods** — no conversion to free functions, no signature change, no call-site churn.
 
@@ -392,18 +414,18 @@ Result: all three targets call the same names with the same syntax.  The `::` wo
 
 Result: `I2SClocklessLedDriver.h` drops from ~2000 lines to ~500 lines of class interface.  All call sites are unchanged — callers still call `hwInit()`, `hwStart()`, etc. as class methods.
 
-### Phase 7 — Align function signatures and variable names (pending)
+### Phase 8 — Align function signatures and variable names (pending)
 
-*Goal:* Every platform calls the same functions with the same signatures — no `#ifdef` at the call site and no argument-type differences.  The key blocker after Phase 6 is `hwStart`: ESP32/S3 takes a `DMABuffer*` while P4 takes no argument.
+*Goal:* Every platform calls the same functions with the same signatures — no `#ifdef` at the call site and no argument-type differences.  The key blocker after Phase 7 is `hwStart`: ESP32/S3 takes a `DMABuffer*` while P4 takes no argument.
 
 #### `hwStart` unification
 
-After Phase 6, the signatures are still mismatched:
+After Phase 7, the signatures are still mismatched:
 
 | Platform | Current call site | Signature after Phase 5 |
 |----------|------------------|-------------------------|
 | ESP32/S3 | `hwStart(dmaBuffersTampon[nbDmaBuffer - 1])` | `hwStart(DMABuffer*)` |
-| P4 | `::hwStart(this)` → `hwStart()` after Phase 5 | `hwStart()` |
+| P4 | `hwStart()` | `hwStart()` |
 
 To unify: change `hwStart()` on ESP32/S3 to take no argument.  Instead of the caller handing over the start-of-chain buffer, `hwStart()` looks it up itself via `this`:
 
@@ -432,8 +454,8 @@ This removes the last argument difference between platforms and means `showPixel
 
 Rename `dmaBuffersTampon` → `transferBuffers` at the same time as the `hwStart` change, since `hwStart()` internalising the buffer pointer is the natural moment to also rename the member it accesses.
 
-### Phase 8 — Common LUT application layer (pending)
+### Phase 9 — Common LUT application layer (pending)
 
 *Goal:* The per-pixel LUT+channel-reorder logic (`rgbwBufferMapping` on P4, inline code in `loadAndTranspose` on ESP32/S3) is written once as a shared method.
 
-`rgbwBufferMapping` is already defined in `parlio_p4_impl.h` (moved from `parlio_p4.cpp` in Phase 5) as a file-local static helper.  Phase 8 promotes it to a shared class method; ESP32/S3 `loadAndTranspose` should call it rather than duplicating the LUT indexing inline.  Requires ISR-path benchmarking on real hardware before committing — `loadAndTranspose` runs in interrupt context on ESP32/S3 and any extra call overhead must be measured.
+`rgbwBufferMapping` is already defined in `parlio_p4_impl.h` (moved from `parlio_p4.cpp` in Phase 5) as a file-local static helper.  Phase 9 promotes it to a shared class method; ESP32/S3 `loadAndTranspose` should call it rather than duplicating the LUT indexing inline.  Requires ISR-path benchmarking on real hardware before committing — `loadAndTranspose` runs in interrupt context on ESP32/S3 and any extra call overhead must be measured.
