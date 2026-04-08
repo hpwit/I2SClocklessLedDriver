@@ -25,12 +25,12 @@
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
   // ESP32-P4 uses the PARLIO peripheral — no I2S/DMA headers needed.
+  #include "esp_heap_caps.h"
   #include "esp_log.h"
   #include "esp_rom_sys.h"
   #include "freertos/semphr.h"
   #include "freertos/task.h"
-  #include "esp_heap_caps.h"
-  
+
   // PARLIO driver (requires ESP-IDF v5.1+)
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
     #include "driver/parlio_tx.h"
@@ -39,15 +39,20 @@
     #warning "ESP32-P4 PARLIO support requires ESP-IDF v5.1 or later"
     #define HAS_PARLIO_DRIVER 0
   #endif
-  
-  #include "parlio_p4.h"
+
+/** Shared waveform-buffer size used by both the allocator (initTransferBuffers)
+ *  and the capacity check (loadAndTranspose).
+ *  Formula: max_leds × max_components × 32 ticks × max_data_width_bits / 8
+ *           = 1024 × 5 × 32 × 16 / 8 = 327,680 bytes */
+static constexpr uint32_t PARLIO_P4_BUFFER_BYTES = 1024u * 5u * 32u * 16u / 8u;
 #else
-// IDF5.5: replace #include driver by #include esp_private
+  // IDF5.5: replace #include driver by #include esp_private
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     #include <esp_private/gpio.h>
     #include <esp_private/periph_ctrl.h>
   #else
     #include <driver/periph_ctrl.h>
+
     #include "driver/gpio.h"
   #endif
 #endif  // CONFIG_IDF_TARGET_ESP32P4
@@ -140,10 +145,10 @@ extern clock_speed clock800Khz;
   // #include "esp32-hal-log.h"
 
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 0, 0)
+    #include "esp_rom_sys.h"
     #include "hal/gpio_ll.h"
     #include "rom/gpio.h"
     #include "soc/gpio_struct.h"
-    #include "esp_rom_sys.h"
   #endif
 
 #endif
@@ -197,7 +202,6 @@ extern clock_speed clock800Khz;
   #define _LEDMAPPING
 #endif
 // #define FULL_DMA_BUFFER
-
 
 #define MAX_PINS 20  // maximum number of pins supported, 🌙 was 16, set to 20, okay?
 
@@ -281,7 +285,6 @@ struct LedTiming {
   uint8_t f3;
 };
 
-
 /**
  * I2SClocklessLedDriver — parallel LED strip driver for ESP32 / ESP32-S3.
  *
@@ -358,8 +361,8 @@ class I2SClocklessLedDriver {
   bool isVirtualDriver = false;
 
   uint8_t virtualStripsPerPin = 0;  // typically 8 (one 74HC595 per physical pin); 0 = not configured
-  uint8_t clockPin            = 0;  // 74HC245 shift-register clock GPIO
-  uint8_t latchPin            = 0;  // 74HC245 shift-register latch GPIO
+  uint8_t clockPin = 0;             // 74HC245 shift-register clock GPIO
+  uint8_t latchPin = 0;             // 74HC245 shift-register latch GPIO
 
   TickType_t showDelay = 0;
 
@@ -378,17 +381,17 @@ class I2SClocklessLedDriver {
 
   // PARLIO peripheral handle and configuration (only available in ESP-IDF v5.1+).
   #if HAS_PARLIO_DRIVER
-  parlio_tx_unit_handle_t p4TxUnit  = NULL;
-  parlio_tx_unit_config_t p4Config  = {};
+  parlio_tx_unit_handle_t p4TxUnit = NULL;
+  parlio_tx_unit_config_t p4Config = {};
   #endif
 
   // Topology cache: hwInit() skips reconfiguration when these match current values.
-  int  p4LastOutputs      = -1;
-  int  p4LastLedsPerOutput = -1;
+  int p4LastOutputs = -1;
+  int p4LastLedsPerOutput = -1;
 
   // Ping-pong waveform buffers — allocated in initLedImpl(), freed in deleteDriver().
-  uint16_t* p4Buffer1      = nullptr;
-  uint16_t* p4Buffer2      = nullptr;
+  uint16_t* p4Buffer1 = nullptr;
+  uint16_t* p4Buffer2 = nullptr;
   uint16_t* p4BufferActive = nullptr;
 #endif
 
@@ -447,7 +450,7 @@ class I2SClocklessLedDriver {
   void setPins(uint8_t* pinsq) {
     for (int i = 0; i < numStrips && i < MAX_PINS; i++) this->pins[i] = pinsq[i];
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-    // P4: pin numbers stored above; the PARLIO peripheral configures GPIO routing itself.
+      // P4: pin numbers stored above; the PARLIO peripheral configures GPIO routing itself.
 #elif CONFIG_IDF_TARGET_ESP32
     for (int i = 0; i < numStrips; i++) {
       PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pinsq[i]], PIN_FUNC_GPIO);
@@ -477,7 +480,7 @@ class I2SClocklessLedDriver {
   /** Sets global brightness (0–255) and recomputes gamma lookup tables. */
   void setBrightness(uint8_t brightness) {
     this->brightness = brightness;
-    
+
     // Allocate LUTs if not already allocated
     if (!redMap) {
       redMap = (uint8_t*)malloc(256);
@@ -538,7 +541,7 @@ class I2SClocklessLedDriver {
       free(white2Map);
       white2Map = nullptr;
     }
-    
+
     // Fill LUTs with gamma-corrected values
     float tmp;
     for (int i = 0; i < 256; i++) {
@@ -700,6 +703,91 @@ class I2SClocklessLedDriver {
     SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
     */
     esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3, &interruptHandler, this, &intrHandle);  // 🌙 | ESP_INTR_FLAG_IRAM removed to avoid Cache Disabled but Cached Memory Region Accessed
+#elif CONFIG_IDF_TARGET_ESP32P4
+  // Configure (or reconfigure) the PARLIO TX unit.  No-op if topology unchanged.
+  #if !HAS_PARLIO_DRIVER
+    ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
+    initErrorOccurred = true;
+    return;
+  #endif
+
+    {
+      uint8_t outputs = numStrips;
+      if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH) outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
+      const uint16_t max_leds = numLedPerStrip;
+
+      // Topology unchanged — nothing to do.
+      if ((int)outputs == p4LastOutputs && (int)max_leds == p4LastLedsPerOutput) return;
+
+      p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
+      if (outputs <= 1)
+        p4Config.data_width = 1;
+      else if (outputs <= 2)
+        p4Config.data_width = 2;
+      else if (outputs <= 4)
+        p4Config.data_width = 4;
+      else if (outputs <= 8)
+        p4Config.data_width = 8;
+      else
+        p4Config.data_width = 16;
+
+      p4Config.clk_in_gpio_num = gpio_num_t(-1);
+      p4Config.valid_gpio_num = gpio_num_t(-1);
+      p4Config.clk_out_gpio_num = gpio_num_t(-1);
+
+      for (int i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; ++i) {
+        p4Config.data_gpio_nums[i] = (i < outputs) ? gpio_num_t(pins[i]) : gpio_num_t(-1);
+      }
+
+  #ifdef PARLIO_AUTO_OVERCLOCK
+      if (max_leds <= 256)
+        p4Config.output_clk_freq_hz = 1200000u * 4u;
+      else if (max_leds <= 512)
+        p4Config.output_clk_freq_hz = 1100000u * 4u;
+      else
+        p4Config.output_clk_freq_hz = 800000u * 4u;
+  #else
+      p4Config.output_clk_freq_hz = 800000u * 4u;
+  #endif
+      p4Config.valid_start_delay = 0;
+      p4Config.valid_stop_delay = 0;
+      p4Config.dma_burst_size = 64;
+      p4Config.trans_queue_depth = 16;
+      p4Config.max_transfer_size = 65535;
+      p4Config.flags.clk_gate_en = 0;
+      p4Config.flags.io_loop_back = 0;
+      p4Config.flags.allow_pd = 0;
+      p4Config.flags.invert_valid_out = 0;
+
+      if (p4TxUnit != NULL) {
+        esp_err_t err;
+        if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "hwInit: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+        if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "hwInit: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+        if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "hwInit: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
+        p4TxUnit = NULL;
+      }
+
+      esp_err_t err;
+      if ((err = parlio_new_tx_unit(&p4Config, &p4TxUnit)) != ESP_OK) {
+        ESP_LOGE(TAG, "hwInit: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
+        p4TxUnit = NULL;
+        initErrorOccurred = true;
+        return;
+      }
+      if ((err = parlio_tx_unit_enable(p4TxUnit)) != ESP_OK) {
+        ESP_LOGE(TAG, "hwInit: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
+        parlio_del_tx_unit(p4TxUnit);
+        p4TxUnit = NULL;
+        initErrorOccurred = true;
+        return;
+      }
+
+      p4LastOutputs = outputs;
+      p4LastLedsPerOutput = max_leds;
+
+      ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)", (unsigned)outputs, (unsigned)max_leds);
+    }
+    return;  // P4: skip S3/ESP32 semaphore creation below
 #endif
     // -- Create a semaphore to block execution until all the controllers are done
 
@@ -716,30 +804,53 @@ class I2SClocklessLedDriver {
   }
 
   void initTransferBuffers() {
-/*
-dmaBuffersTampon[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
-dmaBuffersTampon[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-dmaBuffersTampon[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-dmaBuffersTampon[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+    /*
+    dmaBuffersTampon[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
+    dmaBuffersTampon[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    dmaBuffersTampon[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    dmaBuffersTampon[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
 
-putdefaultones((uint16_t *)dmaBuffersTampon[0]->buffer);
-putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
-*/
+    putdefaultones((uint16_t *)dmaBuffersTampon[0]->buffer);
+    putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
+    */
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-  dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-  if (!dmaBuffersTampon) {
-    ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
-    initErrorOccurred = true;
-    return;
-  }
+    dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+    if (!dmaBuffersTampon) {
+      ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
+      initErrorOccurred = true;
+      return;
+    }
 #elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
-  dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
-  if (!dmaBuffersTampon) {
-    ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
-    initErrorOccurred = true;
-    return;
-  }
+    dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
+    if (!dmaBuffersTampon) {
+      ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
+      initErrorOccurred = true;
+      return;
+    }
+#elif CONFIG_IDF_TARGET_ESP32P4
+    // Allocate ping-pong waveform buffers for PARLIO DMA.
+    if (!p4Buffer1) {
+      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+      if (!p4Buffer1) {
+        ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer1 — out of memory");
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    if (!p4Buffer2) {
+      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+      if (!p4Buffer2) {
+        ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer2 — out of memory");
+        heap_caps_free(p4Buffer1);
+        p4Buffer1 = nullptr;
+        p4BufferActive = nullptr;
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    p4BufferActive = p4Buffer1;
+    return;  // P4 done; skip S3/ESP32 DMA buffer setup below
 #endif
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
@@ -1190,14 +1301,6 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
       return;
     }
 
-#ifdef CONFIG_IDF_TARGET_ESP32P4
-    ::loadAndTranspose(this);
-    ::hwStart(this);
-    ::hwStop(this);
-    isDisplaying = false;
-    return;
-#endif
-
 #ifdef __HARDWARE_MAP
     hmapOff = hmap;
 
@@ -1209,7 +1312,8 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 
     ledToDisplay = 0;
     transpose = true;
-#ifdef CONFIG_IDF_TARGET_ESP32
+#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+  #ifdef CONFIG_IDF_TARGET_ESP32
     for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
       dmaBuffersTampon[buffNum]->descriptor.qe.stqe_next = &(dmaBuffersTampon[buffNum + 1]->descriptor);
     }
@@ -1218,15 +1322,14 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     dmaBuffersTampon[nbDmaBuffer]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
     dmaBuffersTampon[nbDmaBuffer + 1]->descriptor.qe.stqe_next = 0;
 
-#elif CONFIG_IDF_TARGET_ESP32S3
+  #elif CONFIG_IDF_TARGET_ESP32S3
     for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
       dmaBuffersTampon[buffNum]->next = dmaBuffersTampon[buffNum + 1];
     }
     dmaBuffersTampon[nbDmaBuffer - 1]->next = dmaBuffersTampon[0];
     dmaBuffersTampon[nbDmaBuffer]->next = dmaBuffersTampon[0];
     dmaBuffersTampon[nbDmaBuffer + 1]->next = dmaBuffersTampon[nbDmaBuffer + 1];
-#endif
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+  #endif
 
     ledToDisplay = 0;
     dmaBufferActive = 0;
@@ -1252,6 +1355,11 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
       isWaiting = false;
       isDisplaying = true;
     }
+#elif CONFIG_IDF_TARGET_ESP32P4
+    loadAndTranspose();
+    hwStart();
+    hwStop();
+    isDisplaying = false;
 #endif
   }
 
@@ -1381,7 +1489,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   void initLedImpl(uint8_t* leds, uint8_t* pinsq, uint8_t numStrips, uint16_t numLedPerStrip) {
     // Reset error state so retry after a failed initled() works correctly.
     initErrorOccurred = false;
-    initSuccess       = false;
+    initSuccess = false;
 
     gammab = 1;
     gammar = 1;
@@ -1470,14 +1578,6 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
     #endif
     */
 
-#ifdef CONFIG_IDF_TARGET_ESP32P4
-    // P4: store GPIO pins, configure PARLIO unit, allocate ping-pong waveform buffers.
-    setPins(pinsq);
-    ::hwInit(this);
-    if (!::initTransferBuffers(this)) return;  // initErrorOccurred already set
-    initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
-    return;
-#endif
     setPins(pinsq);
     hwInit();
     initTransferBuffers();
@@ -1661,6 +1761,12 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   }
 #endif
 
+#ifdef CONFIG_IDF_TARGET_ESP32P4
+  void loadAndTranspose();
+  void hwStart();
+  void hwStop();
+#endif
+
   void IRAM_ATTR i2sReset() {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     gdma_reset(dmaChan);
@@ -1679,7 +1785,7 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
 };
 #ifndef CONFIG_IDF_TARGET_ESP32P4
 static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
-#ifdef CONFIG_IDF_TARGET_ESP32S3
+  #ifdef CONFIG_IDF_TARGET_ESP32S3
 
   // gdma_disconnect(dmaChan);
   LCD_CAM.lcd_user.lcd_start = 0;
@@ -1689,15 +1795,15 @@ static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
   gdma_stop(dmaChan);
   // ets_delay_us(16);  // for sk6812
   esp_rom_delay_us(16);  // for sk6812
-                     // esp_intr_disable(dmaChan->intr);
-#elif CONFIG_IDF_TARGET_ESP32
+                         // esp_intr_disable(dmaChan->intr);
+  #elif CONFIG_IDF_TARGET_ESP32
   esp_intr_disable(cont->intrHandle);
 
   esp_rom_delay_us(16);
   (&I2S0)->conf.tx_start = 0;
   while ((&I2S0)->conf.tx_start == 1) {
   }
-#endif
+  #endif
   cont->i2sReset();
 
   cont->isDisplaying = false;
@@ -1902,39 +2008,39 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   int nbcomponents = driver->nbComponents;
   Lines secondPixel[nbcomponents];
   uint16_t* buffer = nullptr;
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+  #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
   if (driver->transpose)
     buffer = (uint16_t*)driver->dmaBuffersTampon[driver->dmaBufferActive]->buffer;
   else
     buffer = (uint16_t*)driver->dmaBuffersTransposed[driver->dmaBufferActive]->buffer;
-#endif
+  #endif
   if (buffer == nullptr) return;  // no DMA buffer on unsupported platforms
 
-  // uint16_t led_tmp = driver->ledToDisplay;
-#ifdef __HARDWARE_MAP
-    // led_tmp=driver->ledToDisplay*driver->numStrips;
-#endif
+    // uint16_t led_tmp = driver->ledToDisplay;
+  #ifdef __HARDWARE_MAP
+      // led_tmp=driver->ledToDisplay*driver->numStrips;
+  #endif
   memset(secondPixel, 0, sizeof(secondPixel));
-#ifdef _LEDMAPPING
+  #ifdef _LEDMAPPING
   // #ifdef __SOFTWARE_MAP
   uint8_t* poli;
-    // #endif
-#else
+      // #endif
+  #else
   uint8_t* poli = driver->leds + driver->ledToDisplay * nbcomponents;
-#endif
+  #endif
   for (int i = 0; i < driver->numStrips; i++) {
     if (driver->ledToDisplay < driver->stripSize[i]) {
-#ifdef _LEDMAPPING
-  #ifdef __SOFTWARE_MAP
+  #ifdef _LEDMAPPING
+    #ifdef __SOFTWARE_MAP
       poli = driver->leds + driver->mapLed(led_tmp) * nbcomponents;
-  #endif
-  #ifdef __HARDWARE_MAP
+    #endif
+    #ifdef __HARDWARE_MAP
       poli = driver->leds + *(driver->hmapOff);
-  #endif
-  #ifdef __HARDWARE_MAP_PROGMEM
+    #endif
+    #ifdef __HARDWARE_MAP_PROGMEM
       poli = driver->leds + pgm_read_word_near(driver->hmap + driver->hmapOff);
+    #endif
   #endif
-#endif
       uint8_t red = *(poli + 0);
       uint8_t green = *(poli + 1);
       uint8_t blue = *(poli + 2);
@@ -1956,20 +2062,20 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       secondPixel[driver->pR].bytes[i] = driver->redMap[red];
       secondPixel[driver->pG].bytes[i] = driver->greenMap[green];
       secondPixel[driver->pB].bytes[i] = driver->blueMap[blue];
-#ifdef __HARDWARE_MAP
+  #ifdef __HARDWARE_MAP
       driver->hmapOff++;
-#endif
-#ifdef __HARDWARE_MAP_PROGMEM
-      driver->hmapOff++;
-#endif
-    }
-#ifdef _LEDMAPPING
-  #ifdef __SOFTWARE_MAP
-    led_tmp += driver->stripSize[i];
   #endif
-#else
+  #ifdef __HARDWARE_MAP_PROGMEM
+      driver->hmapOff++;
+  #endif
+    }
+  #ifdef _LEDMAPPING
+    #ifdef __SOFTWARE_MAP
+    led_tmp += driver->stripSize[i];
+    #endif
+  #else
     poli += driver->stripSize[i] * nbcomponents;
-#endif
+  #endif
   }
 
   transpose16x1Noinline2(secondPixel[0].bytes, (uint16_t*)buffer, driver->numStrips);
@@ -1978,6 +2084,8 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   if (driver->pW != UINT8_MAX) transpose16x1Noinline2(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8, driver->numStrips);
   if (driver->pW2 != UINT8_MAX) transpose16x1Noinline2(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8, driver->numStrips);
 }
+#else  // CONFIG_IDF_TARGET_ESP32P4
+  #include "parlio_p4_impl.h"
 #endif  // !CONFIG_IDF_TARGET_ESP32P4
 
 #endif  // I2S_CLOCKLESS_DRIVER_H

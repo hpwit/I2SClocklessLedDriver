@@ -1,25 +1,23 @@
 /**
     @title     I2SClocklessLedDriver
-    @file      parlio_p4.cpp
+    @file      parlio_p4_impl.h
     @repo      https://github.com/hpwit/I2SClocklessLedDriver
     @Authors   Original PARLIO implementation: @troyhacks (https://github.com/troyhacks)
                Extended by @ewowi (https://github.com/ewowi):
                  - Padding to max LEDs per output for unequal strip lengths
                  - RGBCCT (5-channel) support via offsetWhite2
-               Integrated into I2SClocklessLedDriver by @ewowi:
-                 - Replaced extern ledsDriver with explicit driver pointer
-                 - Fixed warm-white LUT: white2 channel now uses white2Map instead of whiteMap
-                 - Adapted extractWhiteFromRGB to respect driver->extractWhiteFromRGB flag
-                 - Removed MoonLight-specific dependencies
+               Integrated into I2SClocklessLedDriver by @ewowi
+               Converted to class methods (Phase 5) by @ewowi
     @Copyright © 2026 Yves Bazin, troyhacks, ewowi
     @license   MIT License
 **/
 
-#include "parlio_p4.h"
+// Out-of-class definitions for I2SClocklessLedDriver P4 PARLIO methods.
+// Included at the bottom of I2SClocklessLedDriver.h, after the class body.
+
+#pragma once
 
 #ifdef CONFIG_IDF_TARGET_ESP32P4
-
-#include "I2SClocklessLedDriver.h"
 
 #include "esp_timer.h"
 #include "esp_rom_sys.h"
@@ -36,7 +34,7 @@
 #define TAG "🐸P4"
 
 static_assert(SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH <= 16,
-              "parlio_p4.cpp assumes max data width <= 16 (bit-packing/shift logic).");
+              "parlio_p4_impl.h assumes max data width <= 16 (bit-packing/shift logic).");
 
 // ---------------------------------------------------------------------------
 // Bit-transposition helpers
@@ -105,7 +103,7 @@ inline void transpose_32_slices(uint32_t (&transposed_slices)[32],
     }
 }
 
-void __attribute__((hot)) process_1bit(uint8_t* buffer, const uint32_t* transposed_slices) {
+inline void __attribute__((hot)) process_1bit(uint8_t* buffer, const uint32_t* transposed_slices) {
     uint32_t packed_word = 0;
     for (int i = 0; i < 32; ++i) {
         if (transposed_slices[i]) packed_word |= (1u << i);
@@ -113,7 +111,7 @@ void __attribute__((hot)) process_1bit(uint8_t* buffer, const uint32_t* transpos
     reinterpret_cast<uint32_t*>(buffer)[0] = packed_word;
 }
 
-void __attribute__((hot)) process_2bit(uint8_t* buffer, const uint32_t* transposed_slices) {
+inline void __attribute__((hot)) process_2bit(uint8_t* buffer, const uint32_t* transposed_slices) {
     uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
     uint32_t word0 = 0, word1 = 0;
     for (int i = 0; i < 16; ++i) word0 |= (transposed_slices[i]      << (i * 2));
@@ -122,7 +120,7 @@ void __attribute__((hot)) process_2bit(uint8_t* buffer, const uint32_t* transpos
     out[1] = word1;
 }
 
-void __attribute__((hot)) process_4bit(uint8_t* buffer, const uint32_t* transposed_slices) {
+inline void __attribute__((hot)) process_4bit(uint8_t* buffer, const uint32_t* transposed_slices) {
     uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
     uint32_t word0 = 0, word1 = 0, word2 = 0, word3 = 0;
     for (int i = 0; i < 8; ++i) word0 |= (transposed_slices[i]      << (i * 4));
@@ -132,7 +130,7 @@ void __attribute__((hot)) process_4bit(uint8_t* buffer, const uint32_t* transpos
     out[0] = word0; out[1] = word1; out[2] = word2; out[3] = word3;
 }
 
-void __attribute__((hot)) process_8bit(uint8_t* buffer, const uint32_t* transposed_slices) {
+inline void __attribute__((hot)) process_8bit(uint8_t* buffer, const uint32_t* transposed_slices) {
     uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
     for (int i = 0; i < 8; ++i) {
         const int base = i * 4;
@@ -143,7 +141,7 @@ void __attribute__((hot)) process_8bit(uint8_t* buffer, const uint32_t* transpos
     }
 }
 
-void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transposed_slices) {
+inline void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transposed_slices) {
     uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
     for (int i = 0; i < 16; ++i) {
         const int base = i * 2;
@@ -160,13 +158,6 @@ void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transp
 /**
  * rgbwBufferMapping — apply driver LUT tables and repack one pixel's colour
  * channels into wire order.
- *
- * Input:  lightsRGBChannel[0..components-1] in RGB(W)(W2) input order.
- * Output: packetRGBChannel[0..components-1] in wire order (offsetR/G/B/W/W2).
- *
- * Bug fixed vs original parlio.cpp: warm white now correctly uses white2Map
- * instead of whiteMap.
- * Requires: LUTs must be validated before calling this function.
  */
 static void rgbwBufferMapping(uint8_t* packetRGBChannel,
                                const uint8_t* lightsRGBChannel,
@@ -182,7 +173,6 @@ static void rgbwBufferMapping(uint8_t* packetRGBChannel,
 
     if (offsetWhite != UINT8_MAX) {
         uint8_t white = lightsRGBChannel[3];
-        // Extract white from RGB if enabled and no explicit white value provided
         if (driver->extractWhiteFromRGB && !white) {
             white  = MIN(MIN(red, green), blue);
             red   -= white;
@@ -192,7 +182,6 @@ static void rgbwBufferMapping(uint8_t* packetRGBChannel,
         packetRGBChannel[offsetWhite] = driver->whiteMap[white];
     }
 
-    // 🌙 Warm white (RGBCCT): input byte 4, use white2Map (bug fix: was whiteMap)
     if (offsetWhite2 != UINT8_MAX) {
         packetRGBChannel[offsetWhite2] = driver->white2Map[lightsRGBChannel[4]];
     }
@@ -209,10 +198,6 @@ static void rgbwBufferMapping(uint8_t* packetRGBChannel,
 /**
  * create_transposed_led_output_optimized — converts the raw LED buffer into the
  * bit-parallel waveform buffer consumed by the PARLIO DMA engine.
- *
- * Iterates over driver->numLedPerStrip positions.  Strips shorter than that are
- * zero-padded (💫 padding feature by @ewowi), which prevents residual colour
- * data from shorter strips being interpreted as pixel data.
  */
 static void create_transposed_led_output_optimized(
         I2SClocklessLedDriver* driver,
@@ -224,7 +209,6 @@ static void create_transposed_led_output_optimized(
         const uint8_t   offsetR, const uint8_t offsetG, const uint8_t offsetB,
         const uint8_t   offsetW, const uint8_t offsetW2) {
 
-    // WS2812 bit-to-waveform look-up table (4 clock-ticks per bit: 0→1000, 1→1110)
     static uint32_t waveform_cache[256];
     static bool     waveform_cache_initialized = false;
 
@@ -239,19 +223,16 @@ static void create_transposed_led_output_optimized(
         0b1110111011101000, 0b1110111011101110,
     };
 
-    // Not guarded with std::call_once: loadAndTranspose is always invoked from a
-    // single task (no concurrent calls), and the initialisation is idempotent —
-    // a torn write produces the same final values, so a race is harmless here.
     if (!waveform_cache_initialized) {
         for (int i = 0; i < 256; ++i) {
-            const uint16_t p1 = bitpatterns[i >> 4];   // high nibble → ticks 0-15
-            const uint16_t p2 = bitpatterns[i & 0x0F]; // low  nibble → ticks 16-31
+            const uint16_t p1 = bitpatterns[i >> 4];
+            const uint16_t p2 = bitpatterns[i & 0x0F];
             waveform_cache[i] = (uint32_t(p2) << 16) | p1;
         }
         waveform_cache_initialized = true;
     }
 
-    const uint16_t max_leds = driver->numLedPerStrip;  // max strip length (class member)
+    const uint16_t max_leds = driver->numLedPerStrip;
 
     const uint32_t WAVEFORM_WORDS_PER_PIXEL = COMPONENTS_PER_PIXEL * 32u;
     const uint32_t total_output_words = max_leds * WAVEFORM_WORDS_PER_PIXEL;
@@ -271,8 +252,6 @@ static void create_transposed_led_output_optimized(
 
     for (uint32_t pixel_in_pin = 0; pixel_in_pin < max_leds; ++pixel_in_pin) {
 
-        // 💫 Build per-pin mapped colour buffer for this pixel position.
-        //    Pins with fewer LEDs than max are zero-padded.
         uint8_t mappedBuffer[COMPONENTS_PER_PIXEL * SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH];
 
         for (uint32_t pin = 0; pin < num_active_pins; ++pin) {
@@ -285,7 +264,6 @@ static void create_transposed_led_output_optimized(
                                   offsetR, offsetG, offsetB, offsetW, offsetW2,
                                   driver);
             } else {
-                // 💫 Pad short strips to zero so they don't display garbage
                 memset(&mappedBuffer[pin * COMPONENTS_PER_PIXEL], 0, COMPONENTS_PER_PIXEL);
             }
         }
@@ -314,7 +292,7 @@ static void create_transposed_led_output_optimized(
 }
 
 // ---------------------------------------------------------------------------
-// PARLIO transmit config — immutable after first use, shared across instances.
+// PARLIO transmit config — immutable after first use.
 // ---------------------------------------------------------------------------
 
 static const parlio_transmit_config_t transmit_config = {
@@ -326,164 +304,44 @@ static const parlio_transmit_config_t transmit_config = {
 };
 
 // ---------------------------------------------------------------------------
-// Public entry points (Phase 1 vocabulary: initTransferBuffers / hwInit /
-//   loadAndTranspose / hwStart / hwStop)
+// I2SClocklessLedDriver P4 method bodies
 // ---------------------------------------------------------------------------
 
-bool initTransferBuffers(I2SClocklessLedDriver* driver) {
-    if (!driver->p4Buffer1) {
-        driver->p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
-            MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-        if (!driver->p4Buffer1) {
-            ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer1 — out of memory");
-            driver->initErrorOccurred = true;
-            return false;
-        }
-    }
-    if (!driver->p4Buffer2) {
-        driver->p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2,
-            MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-        if (!driver->p4Buffer2) {
-            ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer2 — out of memory");
-            heap_caps_free(driver->p4Buffer1);
-            driver->p4Buffer1   = nullptr;
-            driver->p4BufferActive = nullptr;
-            driver->initErrorOccurred = true;
-            return false;
-        }
-    }
-    driver->p4BufferActive = driver->p4Buffer1;
-    return true;
-}
-
-void hwInit(I2SClocklessLedDriver* driver) {
-    #if !HAS_PARLIO_DRIVER
-    ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
-    return;
-    #endif
-
-    uint8_t outputs = driver->numStrips;
+inline void __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
+    uint8_t outputs = numStrips;
     if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
         outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
-    const uint16_t max_leds = driver->numLedPerStrip;
+    const uint16_t max_leds  = numLedPerStrip;
+    const uint8_t  components = nbComponents;
 
-    // No topology change — nothing to do.
-    if ((int)outputs == driver->p4LastOutputs && (int)max_leds == driver->p4LastLedsPerOutput)
-        return;
-
-    // Data width: smallest power-of-2 that covers all outputs.
-    driver->p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
-    if      (outputs <= 1)  driver->p4Config.data_width = 1;
-    else if (outputs <= 2)  driver->p4Config.data_width = 2;
-    else if (outputs <= 4)  driver->p4Config.data_width = 4;
-    else if (outputs <= 8)  driver->p4Config.data_width = 8;
-    else                    driver->p4Config.data_width = 16;
-
-    driver->p4Config.clk_in_gpio_num  = gpio_num_t(-1);
-    driver->p4Config.valid_gpio_num   = gpio_num_t(-1);
-    driver->p4Config.clk_out_gpio_num = gpio_num_t(-1);
-
-    for (int i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; ++i) {
-        driver->p4Config.data_gpio_nums[i] =
-            (i < outputs) ? gpio_num_t(driver->pins[i]) : gpio_num_t(-1);
-    }
-
-    // Adaptive clock: fewer LEDs → faster clock → higher FPS.
-#ifdef PARLIO_AUTO_OVERCLOCK
-    if      (max_leds <= 256) driver->p4Config.output_clk_freq_hz = 1200000u * 4u;
-    else if (max_leds <= 512) driver->p4Config.output_clk_freq_hz = 1100000u * 4u;
-    else                      driver->p4Config.output_clk_freq_hz =  800000u * 4u;
-#else
-    driver->p4Config.output_clk_freq_hz = 800000u * 4u;
-#endif
-    driver->p4Config.valid_start_delay       = 0;
-    driver->p4Config.valid_stop_delay        = 0;
-    driver->p4Config.dma_burst_size          = 64;
-    driver->p4Config.trans_queue_depth       = 16;
-    driver->p4Config.max_transfer_size       = 65535;
-    driver->p4Config.flags.clk_gate_en       = 0;
-    driver->p4Config.flags.io_loop_back      = 0;
-    driver->p4Config.flags.allow_pd          = 0;
-    driver->p4Config.flags.invert_valid_out  = 0;
-
-    if (driver->p4TxUnit != NULL) {
-        esp_err_t err;
-        if ((err = parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY)) != ESP_OK)
-            ESP_LOGE(TAG, "hwInit: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
-        if ((err = parlio_tx_unit_disable(driver->p4TxUnit)) != ESP_OK)
-            ESP_LOGE(TAG, "hwInit: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
-        if ((err = parlio_del_tx_unit(driver->p4TxUnit)) != ESP_OK)
-            ESP_LOGE(TAG, "hwInit: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
-        driver->p4TxUnit = NULL;
-    }
-
-    esp_err_t err;
-    if ((err = parlio_new_tx_unit(&driver->p4Config, &driver->p4TxUnit)) != ESP_OK) {
-        ESP_LOGE(TAG, "hwInit: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
-        driver->p4TxUnit = NULL;
-        return;
-    }
-    if ((err = parlio_tx_unit_enable(driver->p4TxUnit)) != ESP_OK) {
-        ESP_LOGE(TAG, "hwInit: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
-        parlio_del_tx_unit(driver->p4TxUnit);
-        driver->p4TxUnit = NULL;
-        return;
-    }
-
-    driver->p4LastOutputs       = outputs;
-    driver->p4LastLedsPerOutput = max_leds;
-
-    ESP_LOGD(TAG, "PARLIO configured: %u-bit width, %u KHz, %u outputs",
-             driver->p4Config.data_width, driver->p4Config.output_clk_freq_hz / 1000u / 4u, outputs);
-    for (uint8_t i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; i++) {
-        const char* status = "";
-        if (i >= outputs) status = "[unused]";
-        else if (driver->p4Config.data_gpio_nums[i] == -1) status = "[missing]";
-        ESP_LOGD(TAG, "  Output %u = GPIO %d %s",
-                 (unsigned)(i + 1), (int)driver->p4Config.data_gpio_nums[i], status);
-    }
-    ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)",
-             (unsigned)outputs, (unsigned)max_leds);
-}
-
-void __attribute__((hot)) loadAndTranspose(I2SClocklessLedDriver* driver) {
-    uint8_t outputs = driver->numStrips;
-    if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
-        outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
-    const uint16_t max_leds  = driver->numLedPerStrip;
-    const uint8_t  components = driver->nbComponents;
-
-    // Guard: waveform buffer must be large enough for the current config.
     const uint32_t required_bytes =
-        ((uint32_t)max_leds * components * 32u * driver->p4Config.data_width + 7u) / 8u;
+        ((uint32_t)max_leds * components * 32u * p4Config.data_width + 7u) / 8u;
     if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
         ESP_LOGE(TAG, "loadAndTranspose: buffer too small "
                       "(%u needed, %u allocated) for %u LEDs × %u ch × %u-bit — skipping frame",
                  (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES,
                  (unsigned)max_leds, (unsigned)components,
-                 (unsigned)driver->p4Config.data_width);
+                 (unsigned)p4Config.data_width);
         return;
     }
 
     create_transposed_led_output_optimized(
-        driver, driver->leds, driver->p4BufferActive,
-        driver->stripSize, outputs, components,
-        driver->pR, driver->pG, driver->pB, driver->pW, driver->pW2);
+        this, leds, p4BufferActive,
+        stripSize, outputs, components,
+        pR, pG, pB, pW, pW2);
 }
 
-void hwStart(I2SClocklessLedDriver* driver) {
-    const uint8_t  components = driver->nbComponents;
-    const uint16_t max_leds   = driver->numLedPerStrip;
+inline void I2SClocklessLedDriver::hwStart() {
+    const uint8_t  components = nbComponents;
+    const uint16_t max_leds   = numLedPerStrip;
 
-    // Compute chunk layout from the current (pre-swap) active buffer.
-    const uint32_t bits_per_pixel   = components * 32u * driver->p4Config.data_width;
+    const uint32_t bits_per_pixel   = components * 32u * p4Config.data_width;
     const uint32_t bytes_per_pixel  = (bits_per_pixel + 7u) / 8u;
-    // bytes_per_pixel == 0 cannot happen (components >= 3, data_width >= 1), but guard anyway.
     if (bytes_per_pixel == 0) {
         ESP_LOGE(TAG, "hwStart: bytes_per_pixel == 0 — skipping frame");
         return;
     }
-    const uint32_t HW_MAX_BYTES       = driver->p4Config.max_transfer_size;
+    const uint32_t HW_MAX_BYTES       = p4Config.max_transfer_size;
     const uint16_t max_leds_per_chunk = HW_MAX_BYTES / bytes_per_pixel;
     const uint8_t  num_chunks         = (uint8_t)((max_leds + max_leds_per_chunk - 1u) / max_leds_per_chunk);
     const size_t   chunk_stride       = (size_t)max_leds_per_chunk * bytes_per_pixel;
@@ -493,10 +351,9 @@ void hwStart(I2SClocklessLedDriver* driver) {
     uint32_t leds_remaining = max_leds;
     uint32_t leds_in_chunk;
 
-    // chunk_ptrs are captured from the CURRENT active buffer before ping-pong swap.
     leds_in_chunk   = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
     chunk_bits[0]   = leds_in_chunk * bits_per_pixel;
-    chunk_ptrs[0]   = (const uint8_t*)driver->p4BufferActive;
+    chunk_ptrs[0]   = (const uint8_t*)p4BufferActive;
     leds_remaining -= leds_in_chunk;
 
     leds_in_chunk   = (leds_remaining < max_leds_per_chunk) ? leds_remaining : max_leds_per_chunk;
@@ -513,23 +370,20 @@ void hwStart(I2SClocklessLedDriver* driver) {
     chunk_ptrs[3]   = chunk_ptrs[2] + chunk_stride;
 
     // Swap ping-pong: next loadAndTranspose writes to the idle buffer.
-    driver->p4BufferActive = (driver->p4BufferActive == driver->p4Buffer1)
-        ? driver->p4Buffer2 : driver->p4Buffer1;
+    p4BufferActive = (p4BufferActive == p4Buffer1) ? p4Buffer2 : p4Buffer1;
 
     // Queue chunks for non-blocking PARLIO TX.
     for (int i = 0; i < num_chunks && i < 4; ++i) {
         if (chunk_bits[i] > 0) {
             ESP_ERROR_CHECK(parlio_tx_unit_transmit(
-                driver->p4TxUnit, chunk_ptrs[i], chunk_bits[i], &transmit_config));
+                p4TxUnit, chunk_ptrs[i], chunk_bits[i], &transmit_config));
         }
     }
 }
 
-void hwStop(I2SClocklessLedDriver* driver) {
-    // Block until the PARLIO TX unit has finished transmitting.
-    // A short guard delay is added when the wait returned immediately (hardware idle).
+inline void I2SClocklessLedDriver::hwStop() {
     int64_t before = esp_timer_get_time();
-    ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(driver->p4TxUnit, portMAX_DELAY));
+    ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY));
     int64_t after = esp_timer_get_time();
     if (after - before < 50) esp_rom_delay_us(20);
 }

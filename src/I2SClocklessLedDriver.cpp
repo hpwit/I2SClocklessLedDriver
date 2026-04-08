@@ -51,7 +51,14 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   nbDmaBuffer   = dmaBuffer;
   this->nbComponents = nbComponents;
   this->pR = pR;  this->pG = pG;  this->pB = pB;  this->pW = pW;  this->pW2 = pW2;
-  ::hwInit(this);
+  hwInit();
+  #if HAS_PARLIO_DRIVER
+  if (p4TxUnit == NULL) {
+    initSuccess = false;
+    ESP_LOGE(TAG, "updateDriver (P4): PARLIO reconfiguration failed — driver disabled");
+    return;
+  }
+  #endif
   setBrightness(brightness);
   ESP_LOGD(TAG, "updateDriver (P4) %d x %d", numStrips, this->numLedPerStrip);
   return;
