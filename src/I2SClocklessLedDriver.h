@@ -798,26 +798,26 @@ class I2SClocklessLedDriver {
 
   void initTransferBuffers() {
     /*
-    dmaBuffersTampon[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
-    dmaBuffersTampon[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    dmaBuffersTampon[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    dmaBuffersTampon[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+    transferBuffers[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
+    transferBuffers[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    transferBuffers[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    transferBuffers[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
 
-    putdefaultones((uint16_t *)dmaBuffersTampon[0]->buffer);
-    putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
+    putdefaultones((uint16_t *)transferBuffers[0]->buffer);
+    putdefaultones((uint16_t *)transferBuffers[1]->buffer);
     */
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-    dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-    if (!dmaBuffersTampon) {
-      ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
+    transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+    if (!transferBuffers) {
+      ESP_LOGE(TAG, "Failed to allocate transferBuffers!");
       initErrorOccurred = true;
       return;
     }
 #elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
-    dmaBuffersTampon = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
-    if (!dmaBuffersTampon) {
-      ESP_LOGE(TAG, "Failed to allocate dmaBuffersTampon!");
+    transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
+    if (!transferBuffers) {
+      ESP_LOGE(TAG, "Failed to allocate transferBuffers!");
       initErrorOccurred = true;
       return;
     }
@@ -848,12 +848,12 @@ class I2SClocklessLedDriver {
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
     for (int i = 0; i < nbDmaBuffer + 1; i++) {
-      dmaBuffersTampon[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+      transferBuffers[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
     }
-    dmaBuffersTampon[nbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+    transferBuffers[nbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
 
     for (int i = 0; i < nbDmaBuffer; i++) {
-      putdefaultones((uint16_t*)dmaBuffersTampon[i]->buffer);
+      putdefaultones((uint16_t*)transferBuffers[i]->buffer);
     }
 #endif
 
@@ -913,7 +913,7 @@ class I2SClocklessLedDriver {
     transpose = false;
     // wasWaitingtofinish = true;
     //  Serial.printf(" was:%d\n",wasWaitingtofinish);
-    hwStart(dmaBuffersTransposed[0]);
+    hwStart();
 
     if (dispmode == WAIT) {
       isWaiting = true;
@@ -1307,20 +1307,20 @@ class I2SClocklessLedDriver {
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
   #ifdef CONFIG_IDF_TARGET_ESP32
     for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
-      dmaBuffersTampon[buffNum]->descriptor.qe.stqe_next = &(dmaBuffersTampon[buffNum + 1]->descriptor);
+      transferBuffers[buffNum]->descriptor.qe.stqe_next = &(transferBuffers[buffNum + 1]->descriptor);
     }
 
-    dmaBuffersTampon[nbDmaBuffer - 1]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
-    dmaBuffersTampon[nbDmaBuffer]->descriptor.qe.stqe_next = &(dmaBuffersTampon[0]->descriptor);
-    dmaBuffersTampon[nbDmaBuffer + 1]->descriptor.qe.stqe_next = 0;
+    transferBuffers[nbDmaBuffer - 1]->descriptor.qe.stqe_next = &(transferBuffers[0]->descriptor);
+    transferBuffers[nbDmaBuffer]->descriptor.qe.stqe_next = &(transferBuffers[0]->descriptor);
+    transferBuffers[nbDmaBuffer + 1]->descriptor.qe.stqe_next = 0;
 
   #elif CONFIG_IDF_TARGET_ESP32S3
     for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
-      dmaBuffersTampon[buffNum]->next = dmaBuffersTampon[buffNum + 1];
+      transferBuffers[buffNum]->next = transferBuffers[buffNum + 1];
     }
-    dmaBuffersTampon[nbDmaBuffer - 1]->next = dmaBuffersTampon[0];
-    dmaBuffersTampon[nbDmaBuffer]->next = dmaBuffersTampon[0];
-    dmaBuffersTampon[nbDmaBuffer + 1]->next = dmaBuffersTampon[nbDmaBuffer + 1];
+    transferBuffers[nbDmaBuffer - 1]->next = transferBuffers[0];
+    transferBuffers[nbDmaBuffer]->next = transferBuffers[0];
+    transferBuffers[nbDmaBuffer + 1]->next = transferBuffers[nbDmaBuffer + 1];
   #endif
 
     ledToDisplay = 0;
@@ -1334,7 +1334,7 @@ class I2SClocklessLedDriver {
     dmaBufferActive = nbDmaBuffer - 1;
     ledToDisplayOut = 0;
     isDisplaying = true;
-    hwStart(dmaBuffersTampon[nbDmaBuffer]);
+    hwStart();
 
     if (displayMode == WAIT) {
       isWaiting = true;
@@ -1575,6 +1575,10 @@ class I2SClocklessLedDriver {
 
     setPins(pinsq);
     hwInit();
+    if (initErrorOccurred) {
+      initSuccess = false;
+      return;
+    }
     initTransferBuffers();
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   }
@@ -1593,7 +1597,7 @@ class I2SClocklessLedDriver {
   I2SClocklessLedDriverDMABuffer** dmaBuffersTransposed = NULL;
   // buffer array for the regular way
 
-  I2SClocklessLedDriverDMABuffer** dmaBuffersTampon = NULL;
+  I2SClocklessLedDriverDMABuffer** transferBuffers = NULL;
 
   I2SClocklessLedDriverDMABuffer* allocateDMABuffer(int bytes) {
     I2SClocklessLedDriverDMABuffer* b = (I2SClocklessLedDriverDMABuffer*)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
@@ -1710,9 +1714,18 @@ class I2SClocklessLedDriver {
   }
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-  void hwStart(I2SClocklessLedDriverDMABuffer* startBuffer) {
-  #ifdef CONFIG_IDF_TARGET_ESP32S3
+  void hwStart() {
+    // Resolve the start-of-chain DMA buffer.  In FULL_DMA_BUFFER mode the entire
+    // frame is pre-transposed into dmaBuffersTransposed (transpose == false);
+    // in normal ping-pong mode transferBuffers[nbDmaBuffer] is the sentinel entry
+    // that points back to the ring head (transpose == true).
+    #ifdef FULL_DMA_BUFFER
+    I2SClocklessLedDriverDMABuffer* startBuffer = transpose ? transferBuffers[nbDmaBuffer] : dmaBuffersTransposed[0];
+    #else
+    I2SClocklessLedDriverDMABuffer* startBuffer = transferBuffers[nbDmaBuffer];
+    #endif
 
+  #ifdef CONFIG_IDF_TARGET_ESP32S3
     LCD_CAM.lcd_user.lcd_start = 0;
     gdma_reset(dmaChan);
     LCD_CAM.lcd_user.lcd_dout = 1;    // Enable data out
@@ -1848,7 +1861,7 @@ static IRAM_ATTR bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event
 
       if (cont->ledToDisplayOut == (cont->numLedPerStrip - cont->nbDmaBuffer))  // here it's not -1 because it takes time top have the change into account and it reread the buufer
       {
-        cont->dmaBuffersTampon[(cont->dmaBufferActive) % cont->nbDmaBuffer]->next = (cont->dmaBuffersTampon[cont->nbDmaBuffer + 1]);
+        cont->transferBuffers[(cont->dmaBufferActive) % cont->nbDmaBuffer]->next = (cont->transferBuffers[cont->nbDmaBuffer + 1]);
         // cont->ledToDisplay_inbufferfor[cont->ledToDisplayOut]=cont->dmaBufferActive;
       }
 
@@ -1891,7 +1904,7 @@ static void IRAM_ATTR interruptHandler(void* arg) {
 
         if (cont->ledToDisplayOut == cont->numLedPerStrip - cont->nbDmaBuffer)  // here it's not -1 because it takes time top have the change into account and it reread the buufer
         {
-          cont->dmaBuffersTampon[(cont->dmaBufferActive) % cont->nbDmaBuffer]->descriptor.qe.stqe_next = &(cont->dmaBuffersTampon[cont->nbDmaBuffer + 1]->descriptor);
+          cont->transferBuffers[(cont->dmaBufferActive) % cont->nbDmaBuffer]->descriptor.qe.stqe_next = &(cont->transferBuffers[cont->nbDmaBuffer + 1]->descriptor);
         }
         cont->dmaBufferActive = (cont->dmaBufferActive + 1) % cont->nbDmaBuffer;
       }
@@ -1998,14 +2011,14 @@ static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint
 static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_t *ledt, uint16_t *sizes, uint8_t num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t
                                                                        // *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb)
 {
-  // cont->leds, cont->stripSize, cont->numStrips, (uint16_t *)cont->dmaBuffersTampon[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->redMap, cont->greenMap, cont->blueMap,
+  // cont->leds, cont->stripSize, cont->numStrips, (uint16_t *)cont->transferBuffers[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->redMap, cont->greenMap, cont->blueMap,
   // cont->whiteMap, cont->nbComponents, cont->pR, cont->pG, cont->pB);
   int nbcomponents = driver->nbComponents;
   Lines secondPixel[nbcomponents];
   uint16_t* buffer = nullptr;
   #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
   if (driver->transpose)
-    buffer = (uint16_t*)driver->dmaBuffersTampon[driver->dmaBufferActive]->buffer;
+    buffer = (uint16_t*)driver->transferBuffers[driver->dmaBufferActive]->buffer;
   else
     buffer = (uint16_t*)driver->dmaBuffersTransposed[driver->dmaBufferActive]->buffer;
   #endif

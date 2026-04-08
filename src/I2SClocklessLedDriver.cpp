@@ -88,6 +88,10 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   setShowDelay();
   setPins(pinsq);
   hwInit();
+  if (initErrorOccurred) {
+    initSuccess = false;
+    return;
+  }
   initTransferBuffers();
   setBrightness(brightness);
   initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
@@ -115,16 +119,16 @@ void I2SClocklessLedDriver::deleteDriver() {
     intrHandle = nullptr;
   }
   #endif
-  if (dmaBuffersTampon) {
+  if (transferBuffers) {
     for (int i = 0; i < nbDmaBuffer + 2; i++) {
-      if (dmaBuffersTampon[i]) {
-        if (dmaBuffersTampon[i]->buffer) heap_caps_free(dmaBuffersTampon[i]->buffer);
-        heap_caps_free(dmaBuffersTampon[i]);
-        dmaBuffersTampon[i] = nullptr;
+      if (transferBuffers[i]) {
+        if (transferBuffers[i]->buffer) heap_caps_free(transferBuffers[i]->buffer);
+        heap_caps_free(transferBuffers[i]);
+        transferBuffers[i] = nullptr;
       }
     }
-    heap_caps_free(static_cast<void*>(dmaBuffersTampon));
-    dmaBuffersTampon = nullptr;
+    heap_caps_free(static_cast<void*>(transferBuffers));
+    transferBuffers = nullptr;
   }
 #elif CONFIG_IDF_TARGET_ESP32P4
   #if HAS_PARLIO_DRIVER

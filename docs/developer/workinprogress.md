@@ -2,7 +2,7 @@
 
 This document tracks the ongoing repository reorganization effort to unify platform-specific code (ESP32-D0, ESP32-S3, ESP32-P4) under a common vocabulary and clean architecture.
 
-**Status: Phases 1, 2, 3, 4, 5, 6 completed. Phases 7–9 pending.**
+**Status: Phases 1, 2, 3, 4, 5, 6, 7 completed. Phases 8–9 pending.**
 
 ---
 
@@ -136,8 +136,8 @@ src/
   colorarrangement.h           — ColorArrangement enum + applyColorArrangement()  ✅ done
   i2s_esp32_impl.h             — ESP32-D0:  out-of-class method bodies for hwInit,
   │                               initTransferBuffers, loadAndTranspose, hwStart, hwStop,
-  │                               interruptHandler, transpose16x1Noinline2  (Phase 7)
-  i2s_esp32s3_impl.h           — ESP32-S3:  same method names, different register code  (Phase 7)
+  │                               interruptHandler, transpose16x1Noinline2  (Phase 8)
+  i2s_esp32s3_impl.h           — ESP32-S3:  same method names, different register code  (Phase 8)
   parlio_p4_impl.h             — ESP32-P4:  out-of-class method bodies  ✅ done (Phase 5)
   pixeltypes.h                 — unchanged
   framebuffer.h                — unchanged
@@ -362,9 +362,9 @@ Changes:
 Result: all three targets call the same names with the same syntax.  The `::` workaround introduced in Phase 3 is gone.  `I2SClocklessLedDriver.h` bottom section becomes:
 ```cpp
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-  #include "i2s_esp32s3_impl.h"   // added by Phase 7
+  #include "i2s_esp32s3_impl.h"   // added by Phase 8
 #elif defined(CONFIG_IDF_TARGET_ESP32)
-  #include "i2s_esp32_impl.h"     // added by Phase 7
+  #include "i2s_esp32_impl.h"     // added by Phase 8
 #elif defined(CONFIG_IDF_TARGET_ESP32P4)
   #include "parlio_p4_impl.h"     // ✅ this phase
 #endif
@@ -379,7 +379,7 @@ Changes made:
    - S3: `gdma_disconnect(dmaChan)` + `gdma_del_channel(dmaChan)` — prevents the DMA engine from accessing freed memory; makes `hwInit()` safe to call again.
    - ESP32: `esp_intr_free(intrHandle)` — releases the I2S interrupt handler so it can be reinstalled.
 2. `updateDriver()` is now a single unified body matching `initLedImpl`:
-   ```
+   ```text
    validate args
    compute newNumLedPerStrip          ← before deleteDriver sees the old value
    if isDisplaying: wait (semaphore)  ← no-op on P4; isDisplaying is always false there
@@ -392,9 +392,39 @@ Changes made:
    ```
 3. Fixed two pre-existing P4 bugs found during analysis: missing `setShowDelay()` call and inline `pins[i] = pinsq[i]` instead of `setPins(pinsq)`.
 
-### Phase 7 — Extract ESP32/S3 method bodies to platform impl headers (pending)
+### Phase 7 — Align function signatures and variable names ✅ done
 
-*Goal:* `I2SClocklessLedDriver.h` shrinks to class declaration + method declarations + thin dispatch shells.  The large ESP32/S3 function bodies move to `_impl.h` files that are `#include`d back after the class definition closes, following the pattern established by Phase 5.  **ESP32/S3 functions stay as class methods** — no conversion to free functions, no signature change, no call-site churn.
+*Goal:* Every platform calls the same functions with the same signatures — no `#ifdef` at the call site and no argument-type differences.
+
+#### `hwStart` unification
+
+`hwStart` on ESP32/S3 now takes no argument. The body resolves the start-of-chain DMA buffer internally using the existing `transpose` flag:
+
+```cpp
+void hwStart() {
+  #ifdef FULL_DMA_BUFFER
+  I2SClocklessLedDriverDMABuffer* startBuffer = transpose ? transferBuffers[nbDmaBuffer] : dmaBuffersTransposed[0];
+  #else
+  I2SClocklessLedDriverDMABuffer* startBuffer = transferBuffers[nbDmaBuffer];
+  #endif
+  // ... S3/ESP32 DMA start code ...
+}
+```
+
+Both call sites (`showPixelsImpl` normal path and `FULL_DMA_BUFFER` path) now call plain `hwStart()` with no argument and no `#ifdef` at the call site.
+
+#### Variable name alignment
+
+| Concept | Before | After | Notes |
+|---------|--------|-------|-------|
+| Ping-pong buffer array (ESP32/S3) | `dmaBuffersTampon[]` | `transferBuffers[]` | renamed throughout |
+| Ping-pong buffers (P4) | `p4Buffer1`, `p4Buffer2` | unchanged | types differ; names converge conceptually |
+| Active ping-pong pointer | `dmaBufferActive` (index) / `p4BufferActive` (ptr) | unchanged | types differ; documented analogy |
+| `hwStart` argument | `DMABuffer*` on ESP32/S3, none on P4 | none on all platforms | buffer lookup moved inside `hwStart` |
+
+### Phase 8 — Extract ESP32/S3 method bodies to platform impl headers (pending)
+
+*Goal:* `I2SClocklessLedDriver.h` shrinks to class declaration + method declarations + thin dispatch shells.  The large ESP32/S3 function bodies move to `_impl.h` files that are `#include`d back after the class definition closes, following the pattern established by Phase 5.  **ESP32/S3 functions stay as class methods** — no conversion to free functions, no signature change, no call-site churn.  Done after Phase 7 so the moved bodies already carry the correct unified signatures.
 
 1. Create `src/i2s_esp32s3_impl.h`:
    - Out-of-class definitions: `void I2SClocklessLedDriver::hwInit() { … }`, `initTransferBuffers()`, `allocateDMABuffer()`, `hwStart()`, `hwStop()`, `transpose16x1Noinline2()`, `loadAndTranspose()`, `interruptHandler()`.
@@ -413,46 +443,6 @@ Changes made:
 4. The class body retains bare declarations for every method; only the bodies move out.
 
 Result: `I2SClocklessLedDriver.h` drops from ~2000 lines to ~500 lines of class interface.  All call sites are unchanged — callers still call `hwInit()`, `hwStart()`, etc. as class methods.
-
-### Phase 8 — Align function signatures and variable names (pending)
-
-*Goal:* Every platform calls the same functions with the same signatures — no `#ifdef` at the call site and no argument-type differences.  The key blocker after Phase 7 is `hwStart`: ESP32/S3 takes a `DMABuffer*` while P4 takes no argument.
-
-#### `hwStart` unification
-
-After Phase 7, the signatures are still mismatched:
-
-| Platform | Current call site | Signature after Phase 5 |
-|----------|------------------|-------------------------|
-| ESP32/S3 | `hwStart(dmaBuffersTampon[nbDmaBuffer - 1])` | `hwStart(DMABuffer*)` |
-| P4 | `hwStart()` | `hwStart()` |
-
-To unify: change `hwStart()` on ESP32/S3 to take no argument.  Instead of the caller handing over the start-of-chain buffer, `hwStart()` looks it up itself via `this`:
-
-```cpp
-// Before (caller picks the entry point):
-hwStart(dmaBuffersTampon[nbDmaBuffer - 1]);
-
-// After (hwStart knows where to start):
-void I2SClocklessLedDriver::hwStart() {
-    // uses dmaBuffersTampon[nbDmaBuffer - 1] internally
-}
-```
-
-This removes the last argument difference between platforms and means `showPixelsImpl` can call `hwStart()` unconditionally with no `#ifdef`.
-
-#### Variable name alignment
-
-| Concept | ESP32/S3 current | P4 current | Desired (all targets) |
-|---------|-----------------|------------|-----------------------|
-| Ping-pong buffer array | `dmaBuffersTampon[]` | `p4Buffer1`, `p4Buffer2` | `transferBuffers[]` — types differ but names converge |
-| Active ping-pong pointer | `dmaBufferActive` (uint8 index) | `p4BufferActive` (uint16_t*) | keep; types differ (index vs pointer) — document analogy |
-| "Is a frame in flight?" | `isDisplaying` | `isDisplaying` | already unified |
-| Max LEDs per strip | `numLedPerStrip` | `numLedPerStrip` | already unified |
-| Per-strip sizes | `stripSize[]` | `stripSize[]` | already unified |
-| Per-strip byte offsets | `firstIndexPerOutput[]` | `firstIndexPerOutput[]` | already unified |
-
-Rename `dmaBuffersTampon` → `transferBuffers` at the same time as the `hwStart` change, since `hwStart()` internalising the buffer pointer is the natural moment to also rename the member it accesses.
 
 ### Phase 9 — Common LUT application layer (pending)
 
