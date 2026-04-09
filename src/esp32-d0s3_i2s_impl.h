@@ -79,12 +79,12 @@ inline void I2SClocklessLedDriver::putdefaultones(uint16_t* buffer) {
  23:D0
  */
 #ifdef CONFIG_IDF_TARGET_ESP32
-  for (int i = 0; i < nbComponents * 8 / 2; i++) {
+  for (int i = 0; i < channelsPerLight * 8 / 2; i++) {
     buffer[i * 6 + 1] = 0xffff;
     buffer[i * 6 + 2] = 0xffff;
   }
 #elif CONFIG_IDF_TARGET_ESP32S3
-  for (int i = 0; i < nbComponents * 8; i++) {
+  for (int i = 0; i < channelsPerLight * 8; i++) {
     buffer[i * 3 + 0] = 0xffff;
     // buffer[i * 6 + 2] = 0xffff;
   }
@@ -381,12 +381,11 @@ static void IRAM_ATTR transposeColorChannel(unsigned char* a, uint16_t* b, uint8
 
 // Load one LED row from leds[] buffer, apply LUT+reorder, and transpose to DMA buffer (ping-pong or full mode).
 static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_t *ledt, uint16_t *sizes, uint8_t num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t
-                                                                       // *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb)
+                                                                       // *mapb, uint8_t *mapw, uint8_t channelsPerLight, int pr, int pg, int pb)
 {
   // driver->leds, driver->stripSize, driver->numStrips, (uint16_t *)driver->transferBuffers[driver->dmaBufferActive]->buffer, driver->ledToDisplay, driver->redMap, driver->greenMap, driver->blueMap,
-  // driver->whiteMap, driver->nbComponents, driver->pR, driver->pG, driver->pB);
-  int nbcomponents = driver->nbComponents;  // number of colour channels (RGB or RGBW)
-  Lines secondPixel[nbcomponents];  // temporary buffer for colour components (VLA)
+  // driver->whiteMap, driver->channelsPerLight, driver->pR, driver->pG, driver->pB);
+  Lines secondPixel[driver->channelsPerLight];  // temporary buffer for colour components (VLA)
   uint16_t* buffer = nullptr;  // points to active DMA buffer (resolved below)
   if (driver->transpose)
     buffer = (uint16_t*)driver->transferBuffers[driver->dmaBufferActive]->buffer;
@@ -404,13 +403,13 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   uint8_t* poli;
       // #endif
 #else
-  uint8_t* poli = driver->leds + driver->ledToDisplay * nbcomponents;
+  uint8_t* poli = driver->leds + driver->ledToDisplay * driver->channelsPerLight;
 #endif
   for (int i = 0; i < driver->numStrips; i++) {
     if (driver->ledToDisplay < driver->stripSize[i]) {
 #ifdef _LEDMAPPING
   #ifdef __SOFTWARE_MAP
-      poli = driver->leds + driver->mapLed(led_tmp) * nbcomponents;
+      poli = driver->leds + driver->mapLed(led_tmp) * driver->channelsPerLight;
   #endif
   #ifdef __HARDWARE_MAP
       poli = driver->leds + *(driver->hmapOff);
@@ -423,7 +422,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       uint8_t mapped[5] = {};  // temporary buffer holding mapped pixel in wire order (pR/pG/pB/pW/pW2)
       driver->rgbwBufferMapping(poli, mapped);  // brightness/gamma LUT + white extraction + channel reorder
       // distribute mapped components into their respective colour channels
-      for (int c = 0; c < nbcomponents; c++) secondPixel[c].bytes[i] = mapped[c];
+      for (int c = 0; c < driver->channelsPerLight; c++) secondPixel[c].bytes[i] = mapped[c];
 #ifdef __HARDWARE_MAP
       driver->hmapOff++;
 #endif
@@ -436,7 +435,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
     led_tmp += driver->stripSize[i];
   #endif
 #else
-    poli += driver->stripSize[i] * nbcomponents;
+    poli += driver->stripSize[i] * driver->channelsPerLight;
 #endif
   }
 

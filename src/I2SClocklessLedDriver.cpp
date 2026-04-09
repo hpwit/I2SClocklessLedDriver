@@ -30,7 +30,7 @@ clock_speed clock800Khz = {6, 4, 1};
  *   P4       — isDisplaying is always false (hwStop is synchronous), so the wait
  *              block is a no-op; execution falls straight through to deleteDriver().
  */
-void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t nbComponents, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2) {
+void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2) {
   if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS || dmaBuffer == 0) {
     ESP_LOGE(TAG, "updateDriver: invalid args numStrips=%u dmaBuffer=%u sizes=%p pinsq=%p", numStrips, dmaBuffer, (void*)sizes, (void*)pinsq);
     return;  // leave driver in previous consistent state
@@ -78,7 +78,7 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   defaultOffsetDisplay = offsetDisplay;
   linewidth = newNumLedPerStrip;
   nbDmaBuffer = dmaBuffer;
-  this->nbComponents = nbComponents;
+  this->channelsPerLight = channelsPerLight;
   this->pR = pR;
   this->pG = pG;
   this->pB = pB;

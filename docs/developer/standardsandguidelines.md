@@ -234,7 +234,7 @@ Prompt pattern:
 ```text
 Add an initled() overload that accepts [describe new parameters].
 It must call the canonical initled(leds, pinsq, sizes[], numStrips,
-nbComponents, pR, pG, pB, pW, pW2) after translating its arguments.
+channelsPerLight, pR, pG, pB, pW, pW2) after translating its arguments.
 Do not change initLedImpl() or any platform-specific code.
 ```
 

@@ -40,7 +40,7 @@ enum ColorArrangement {
  * On return, pW and pW2 are UINT8_MAX when the channel is absent.
  *
  * @param cArr          Colour byte order.
- * @param nbComponents  Output: bytes per pixel (3, 4, or 5).
+ * @param channelsPerLight  Output: bytes per pixel (3, 4, or 5).
  * @param pR            Output: wire-order position of the Red channel.
  * @param pG            Output: wire-order position of the Green channel.
  * @param pB            Output: wire-order position of the Blue channel.
@@ -48,38 +48,38 @@ enum ColorArrangement {
  * @param pW2           Output: wire-order position of the warm White channel (UINT8_MAX = absent).
  */
 inline void applyColorArrangement(ColorArrangement cArr,
-                                   uint8_t& nbComponents,
+                                   uint8_t& channelsPerLight,
                                    uint8_t& pR, uint8_t& pG, uint8_t& pB,
                                    uint8_t& pW, uint8_t& pW2) {
   pW  = UINT8_MAX;
   pW2 = UINT8_MAX;
   switch (cArr) {
   case ORDER_RGB:
-    nbComponents = 3; pR = 0; pG = 1; pB = 2;
+    channelsPerLight = 3; pR = 0; pG = 1; pB = 2;
     break;
   case ORDER_RBG:
-    nbComponents = 3; pR = 0; pG = 2; pB = 1;
+    channelsPerLight = 3; pR = 0; pG = 2; pB = 1;
     break;
   case ORDER_GRB:
-    nbComponents = 3; pR = 1; pG = 0; pB = 2;
+    channelsPerLight = 3; pR = 1; pG = 0; pB = 2;
     break;
   case ORDER_GBR:
-    nbComponents = 3; pR = 2; pG = 0; pB = 1;
+    channelsPerLight = 3; pR = 2; pG = 0; pB = 1;
     break;
   case ORDER_BRG:
-    nbComponents = 3; pR = 1; pG = 2; pB = 0;
+    channelsPerLight = 3; pR = 1; pG = 2; pB = 0;
     break;
   case ORDER_BGR:
-    nbComponents = 3; pR = 2; pG = 1; pB = 0;
+    channelsPerLight = 3; pR = 2; pG = 1; pB = 0;
     break;
   case ORDER_GRBW:
-    nbComponents = 4; pR = 1; pG = 0; pB = 2; pW = 3;
+    channelsPerLight = 4; pR = 1; pG = 0; pB = 2; pW = 3;
     break;
   case ORDER_RGBW:
-    nbComponents = 4; pR = 0; pG = 1; pB = 2; pW = 3;
+    channelsPerLight = 4; pR = 0; pG = 1; pB = 2; pW = 3;
     break;
   case ORDER_RGBCCT:
-    nbComponents = 5; pR = 0; pG = 1; pB = 2; pW = 3; pW2 = 4;
+    channelsPerLight = 5; pR = 0; pG = 1; pB = 2; pW = 3; pW2 = 4;
     break;
   }
 }

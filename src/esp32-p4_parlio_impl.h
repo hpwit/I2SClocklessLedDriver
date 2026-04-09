@@ -164,19 +164,26 @@ inline void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t*
 // Main transposition pass
 // ---------------------------------------------------------------------------
 
-/**
- * create_transposed_led_output_optimized — converts the raw LED buffer into the
- * bit-parallel waveform buffer consumed by the PARLIO DMA engine.
- * Uses driver->mapPixel (Phase 9) for unified brightness/gamma LUT + channel reorder.
- */
-static void create_transposed_led_output_optimized(
-        I2SClocklessLedDriver* driver,
-        const uint8_t*  input_buffer,
-        uint16_t*       output_buffer,
-        const uint16_t* pixels_per_pin,
-        const uint32_t  num_active_pins,
-        const uint8_t   COMPONENTS_PER_PIXEL) {
+// ---------------------------------------------------------------------------
+// PARLIO transmit config — immutable after first use.
+// ---------------------------------------------------------------------------
 
+#if HAS_PARLIO_DRIVER
+// PARLIO transmit settings (idle value, non-blocking queue, no loop).
+static const parlio_transmit_config_t transmit_config = {
+    .idle_value = 0x00,  // output idle level (0)
+    .flags = {
+        .queue_nonblocking  = 1,  // don't block on queue full
+        .loop_transmission  = 0,  // single-shot DMA (not looped)
+    }
+};
+
+// ---------------------------------------------------------------------------
+// I2SClocklessLedDriver P4 method bodies
+// ---------------------------------------------------------------------------
+
+// Load one LED row from leds[] buffer, apply LUT+reorder, and transpose to PARLIO buffer (P4 platform).
+inline bool __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
     // cached waveforms (0x100 = 256 possible 8-bit values)
     static uint32_t waveform_cache[256];
     // initialization flag (computed once on first call)
@@ -203,51 +210,66 @@ static void create_transposed_led_output_optimized(
         waveform_cache_initialized = true;
     }
 
-    // max LEDs per output strip
-    const uint16_t max_leds = driver->numLedPerStrip;
+    // number of active parallel outputs (capped to hardware max)
+    uint8_t outputs = numStrips;
+    if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
+        outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
+    // max LED count per output strip
+    const uint16_t max_leds  = numLedPerStrip;
+
+    const uint32_t required_bytes =
+        ((uint32_t)max_leds * channelsPerLight * 32u * p4Config.data_width + 7u) / 8u;
+    if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
+        ESP_LOGE(TAG, "loadAndTranspose: buffer too small "
+                      "(%u needed, %u allocated) for %u LEDs × %u ch × %u-bit — skipping frame",
+                 (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES,
+                 (unsigned)max_leds, (unsigned)channelsPerLight,
+                 (unsigned)p4Config.data_width);
+        return false;
+    }
 
     // 32 time slices per component per LED
-    const uint32_t WAVEFORM_WORDS_PER_PIXEL = COMPONENTS_PER_PIXEL * 32u;
+    const uint32_t WAVEFORM_WORDS_PER_PIXEL = channelsPerLight * 32u;
     // total 32-bit words to fill
     const uint32_t total_output_words = max_leds * WAVEFORM_WORDS_PER_PIXEL;
-    if (total_output_words == 0) return;
+    if (total_output_words == 0) return false;
 
     // bits per parallel word (1/2/4/8/16 for outputs)
     uint8_t bit_width;
-    if      (num_active_pins <= 1)  bit_width = 1;
-    else if (num_active_pins <= 2)  bit_width = 2;
-    else if (num_active_pins <= 4)  bit_width = 4;
-    else if (num_active_pins <= 8)  bit_width = 8;
-    else                            bit_width = 16;
+    if      (outputs <= 1)  bit_width = 1;
+    else if (outputs <= 2)  bit_width = 2;
+    else if (outputs <= 4)  bit_width = 4;
+    else if (outputs <= 8)  bit_width = 8;
+    else                    bit_width = 16;
 
     const size_t total_bytes = (total_output_words * bit_width + 7) / 8;
-    memset(output_buffer, 0, total_bytes);
+    memset(p4BufferActive, 0, total_bytes);
 
-    uint8_t* out_base_ptr = reinterpret_cast<uint8_t*>(output_buffer);
+    uint8_t* out_base_ptr = reinterpret_cast<uint8_t*>(p4BufferActive);
 
     for (uint32_t pixel_in_pin = 0; pixel_in_pin < max_leds; ++pixel_in_pin) {
         // temporary buffer to hold LUT-mapped colour for all active pins at this LED index
-        uint8_t mappedBuffer[COMPONENTS_PER_PIXEL * SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH];
+        uint8_t mappedBuffer[channelsPerLight * SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH];
 
-        for (uint32_t pin = 0; pin < num_active_pins; ++pin) {
-            const uint32_t pixel_idx     = driver->firstIndexPerOutput[pin] + pixel_in_pin;
-            const uint32_t component_idx = pixel_idx * COMPONENTS_PER_PIXEL;
+        for (uint32_t pin = 0; pin < outputs; ++pin) {
+            const uint32_t pixel_idx     = firstIndexPerOutput[pin] + pixel_in_pin;
+            const uint32_t component_idx = pixel_idx * channelsPerLight;
 
-            if (pixel_in_pin < pixels_per_pin[pin]) {
+            if (pixel_in_pin < stripSize[pin]) {
                 // Phase 9: unified LUT+white extraction+channel-reorder method (shared across all platforms)
-                driver->rgbwBufferMapping(&input_buffer[component_idx],
-                                          &mappedBuffer[pin * COMPONENTS_PER_PIXEL]);
+                rgbwBufferMapping(&leds[component_idx],
+                                  &mappedBuffer[pin * channelsPerLight]);
             } else {
-                memset(&mappedBuffer[pin * COMPONENTS_PER_PIXEL], 0, COMPONENTS_PER_PIXEL);
+                memset(&mappedBuffer[pin * channelsPerLight], 0, channelsPerLight);
             }
         }
 
-        for (uint32_t component_in_pixel = 0; component_in_pixel < COMPONENTS_PER_PIXEL; ++component_in_pixel) {
+        for (uint32_t component_in_pixel = 0; component_in_pixel < channelsPerLight; ++component_in_pixel) {
             uint32_t transposed_slices[32];
 
             LedMatrixDetail::transposeColorChannel(transposed_slices, mappedBuffer,
-                                                  component_in_pixel, num_active_pins,
-                                                  COMPONENTS_PER_PIXEL, waveform_cache);
+                                                  component_in_pixel, outputs,
+                                                  channelsPerLight, waveform_cache);
 
             const uint32_t component_start_word =
                 (pixel_in_pin * WAVEFORM_WORDS_PER_PIXEL) + (component_in_pixel * 32u);
@@ -263,61 +285,16 @@ static void create_transposed_led_output_optimized(
             }
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// PARLIO transmit config — immutable after first use.
-// ---------------------------------------------------------------------------
-
-// PARLIO transmit settings (idle value, non-blocking queue, no loop).
-static const parlio_transmit_config_t transmit_config = {
-    .idle_value = 0x00,  // output idle level (0)
-    .flags = {
-        .queue_nonblocking  = 1,  // don't block on queue full
-        .loop_transmission  = 0,  // single-shot DMA (not looped)
-    }
-};
-
-// ---------------------------------------------------------------------------
-// I2SClocklessLedDriver P4 method bodies
-// ---------------------------------------------------------------------------
-
-// Transp all pixels from leds[] to p4BufferActive using create_transposed_led_output_optimized (P4 platform).
-inline bool __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
-    // number of active parallel outputs (capped to hardware max)
-    uint8_t outputs = numStrips;
-    if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
-        outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
-    // max LED count per output strip
-    const uint16_t max_leds  = numLedPerStrip;
-    // colour channels (RGB or RGBW)
-    const uint8_t  components = nbComponents;
-
-    const uint32_t required_bytes =
-        ((uint32_t)max_leds * components * 32u * p4Config.data_width + 7u) / 8u;
-    if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
-        ESP_LOGE(TAG, "loadAndTranspose: buffer too small "
-                      "(%u needed, %u allocated) for %u LEDs × %u ch × %u-bit — skipping frame",
-                 (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES,
-                 (unsigned)max_leds, (unsigned)components,
-                 (unsigned)p4Config.data_width);
-        return false;
-    }
-
-    create_transposed_led_output_optimized(
-        this, leds, p4BufferActive,
-        stripSize, outputs, components);
     return true;
 }
 
 // Start PARLIO TX transfer (split into chunks if needed for large frames).
 inline void I2SClocklessLedDriver::hwStart() {
     // colour channels (RGB or RGBW)
-    const uint8_t  components = nbComponents;
     // LEDs per output
     const uint16_t max_leds   = numLedPerStrip;
 
-    const uint32_t bits_per_pixel   = components * 32u * p4Config.data_width;
+    const uint32_t bits_per_pixel   = channelsPerLight * 32u * p4Config.data_width;
     const uint32_t bytes_per_pixel  = (bits_per_pixel + 7u) / 8u;
     if (bytes_per_pixel == 0) {
         ESP_LOGE(TAG, "hwStart: bytes_per_pixel == 0 — skipping frame");
@@ -360,5 +337,6 @@ inline void I2SClocklessLedDriver::hwStop() {
         esp_rom_delay_us(50 - transfer_time_us);
     }
 }
+#endif  // HAS_PARLIO_DRIVER
 
 #endif  // CONFIG_IDF_TARGET_ESP32P4

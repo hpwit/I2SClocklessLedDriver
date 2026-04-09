@@ -15,7 +15,7 @@ The two public entry points are `initled()` and `showPixels()`. Every other func
 There are currently many `initled()` overloads.  The canonical one — the lowest-level call that all others eventually reach — takes explicit component layout parameters:
 
 ```text
-initled(leds, pinsq, sizes[], numStrips, nbComponents, pR, pG, pB, pW, pW2)   ← canonical / main
+initled(leds, pinsq, sizes[], numStrips, channelsPerLight, pR, pG, pB, pW, pW2)   ← canonical / main
   │
   ├─ populate stripSize[], totalLeds
   └─ initLedImpl(leds, pinsq, numStrips, maxLength)
@@ -112,7 +112,7 @@ The main `initled()` is the one with explicit component layout — no `ColorArra
 ```cpp
 // CANONICAL — all other initled() overloads call this one directly or indirectly
 void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips,
-             uint8_t nbComponents, uint8_t pR, uint8_t pG, uint8_t pB,
+             uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB,
              uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX,
              bool extractWhiteFromRGB = false);
 ```
@@ -311,8 +311,8 @@ Names left unchanged because they describe the operation, not the hardware:
 
 1. Create `src/colorarrangement.h`:
    - The `ColorArrangement` enum (same values, same names — no breaking change for existing users).
-   - Free function `void applyColorArrangement(ColorArrangement cArr, uint8_t& nbComponents, uint8_t& pR, uint8_t& pG, uint8_t& pB, uint8_t& pW, uint8_t& pW2)` with the current switch-case body.
-2. Promote `initled(leds, pinsq, sizes[], numStrips, nbComponents, pR, pG, pB, pW, pW2)` as the **canonical** form — add a prominent comment marking it as the primary entry point.
+   - Free function `void applyColorArrangement(ColorArrangement cArr, uint8_t& channelsPerLight, uint8_t& pR, uint8_t& pG, uint8_t& pB, uint8_t& pW, uint8_t& pW2)` with the current switch-case body.
+2. Promote `initled(leds, pinsq, sizes[], numStrips, channelsPerLight, pR, pG, pB, pW, pW2)` as the **canonical** form — add a prominent comment marking it as the primary entry point.
 3. Replace the duplicated `switch(cArr)` blocks in the convenience overloads with `applyColorArrangement(…)`.
 4. In `I2SClocklessLedDriver.h`: `#include "colorarrangement.h"`.
 

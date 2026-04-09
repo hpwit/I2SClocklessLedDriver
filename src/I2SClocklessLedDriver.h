@@ -243,8 +243,8 @@ static void transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint8_t numStr
 /*
 #ifdef ENABLE_HARDWARE_SCROLL
     static void loadAndTranspose(uint8_t *ledt, int led_per_strip, uint8_t num_stripst, OffsetDisplay offdisp, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t *mapb, uint8_t
-*mapw, int nbcomponents, int pr, int pg, int pb); #else static void loadAndTranspose(uint8_t *ledt, uint16_t *sizes, uint8_t num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapr, uint8_t *mapg,
-uint8_t *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb); #endif
+*mapw, uint8_t driver->channelsPerLight, uint8_t pr, uint8_t pg, uint8_t pb); #else static void loadAndTranspose(uint8_t *ledt, uint16_t *sizes, uint8_t num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapr, uint8_t *mapg,
+uint8_t *mapb, uint8_t *mapw, uint8_t driver->channelsPerLight, uint8_t pr, uint8_t pg, uint8_t pb); #endif
 */
 
 #ifndef CONFIG_IDF_TARGET_ESP32P4
@@ -350,7 +350,7 @@ class I2SClocklessLedDriver {
   // int clock_pin;
   uint8_t pR = 0, pG = 1, pB = 2, pW = UINT8_MAX, pW2 = UINT8_MAX;
   int i2sBasePinIndex = 0;
-  uint8_t nbComponents = 3;  // channels per LED
+  uint8_t channelsPerLight = 3;  // channels per LED
   uint16_t stripSize[MAX_PINS] = {};
   uint32_t (*mapLed)(uint32_t led) = nullptr;
 
@@ -576,8 +576,8 @@ class I2SClocklessLedDriver {
   }
 
   /** Apply brightness/gamma LUTs, white extraction, and channel reorder for one pixel.
-   *  src[0..nbComponents-1] — raw input in (R,G,B[,W[,W2]]) storage order.
-   *  dst[0..nbComponents-1] — mapped output in wire order (pR/pG/pB/pW/pW2 indices). */
+   *  src[0..channelsPerLight-1] — raw input in (R,G,B[,W[,W2]]) storage order.
+   *  dst[0..channelsPerLight-1] — mapped output in wire order (pR/pG/pB/pW/pW2 indices). */
   inline void rgbwBufferMapping(const uint8_t* src, uint8_t* dst) const {
     uint8_t red = src[0];    // raw R from input buffer
     uint8_t green = src[1];  // raw G from input buffer
@@ -748,10 +748,10 @@ class I2SClocklessLedDriver {
 
   void initTransferBuffers() {
     /*
-    transferBuffers[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
-    transferBuffers[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    transferBuffers[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    transferBuffers[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+    transferBuffers[0] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3); // the buffers for the
+    transferBuffers[1] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
+    transferBuffers[2] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
+    transferBuffers[3] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3 * 4);
 
     putdefaultones((uint16_t *)transferBuffers[0]->buffer);
     putdefaultones((uint16_t *)transferBuffers[1]->buffer);
@@ -770,9 +770,9 @@ class I2SClocklessLedDriver {
     }
 
     for (int i = 0; i < nbDmaBuffer + 1; i++) {
-      transferBuffers[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+      transferBuffers[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
     }
-    transferBuffers[nbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+    transferBuffers[nbDmaBuffer + 1] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3 * 4);
 
     for (int i = 0; i < nbDmaBuffer; i++) {
       putdefaultones((uint16_t*)transferBuffers[i]->buffer);
@@ -829,7 +829,7 @@ class I2SClocklessLedDriver {
       else
         p4Config.data_width = 16;
 
-      const uint32_t required_bytes = ((uint32_t)max_leds * nbComponents * 32u * p4Config.data_width + 7u) / 8u;
+      const uint32_t required_bytes = ((uint32_t)max_leds * channelsPerLight * 32u * p4Config.data_width + 7u) / 8u;
       if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
         ESP_LOGE(TAG, "hwInit: configuration requires %u bytes, but only %u are allocated", (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES);
         initErrorOccurred = true;
@@ -901,9 +901,9 @@ class I2SClocklessLedDriver {
     dmaBuffersTransposed = (I2SClocklessLedDriverDMABuffer**)malloc(sizeof(I2SClocklessLedDriverDMABuffer*) * (numLedPerStrip + 2));
     for (int i = 0; i < numLedPerStrip + 2; i++) {
       if (i < numLedPerStrip + 1)
-        dmaBuffersTransposed[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+        dmaBuffersTransposed[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
       else
-        dmaBuffersTransposed[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+        dmaBuffersTransposed[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3 * 4);
       if (i < numLedPerStrip) dmaBuffersTransposed[i]->descriptor.eof = 0;
       if (i) {
         dmaBuffersTransposed[i - 1]->descriptor.qe.stqe_next = &(dmaBuffersTransposed[i]->descriptor);
@@ -1016,10 +1016,10 @@ class I2SClocklessLedDriver {
 
   void transposeAll() {
     ledToDisplay = 0;
-    /*Lines secondPixel[nbComponents];
+    /*Lines secondPixel[channelsPerLight];
     for (int j = 0; j < numLedPerStrip; j++)
     {
-        uint8_t *poli = leds + ledToDisplay * nbComponents;
+        uint8_t *poli = leds + ledToDisplay * channelsPerLight;
         for (int i = 0; i < numStrips; i++)
         {
             uint8_t red = *(poli + 0);
@@ -1044,7 +1044,7 @@ class I2SClocklessLedDriver {
             secondPixel[pG].bytes[i] = greenMap[green];
             secondPixel[pB].bytes[i] = blueMap[blue];
             //#endif
-            poli += numLedPerStrip * nbComponents;
+            poli += numLedPerStrip * channelsPerLight;
         }
         ledToDisplay++;
         transpose16x1Noinline2(secondPixel[0].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer);
@@ -1059,8 +1059,8 @@ class I2SClocklessLedDriver {
       loadAndTranspose(this);
       /*
       #ifdef ENABLE_HARDWARE_SCROLL
-      loadAndTranspose(leds, numLedPerStrip, numStrips, offsetDisplay, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer, j, redMap, greenMap, blueMap, whiteMap, nbComponents,
-      pR, pG, pB); #else loadAndTranspose(leds, stripSize, numStrips, (uint16_t *)dmaBuffersTransposed[j+1]->buffer, j, redMap, greenMap, blueMap, whiteMap, nbComponents, pR, pG, pB);
+      loadAndTranspose(leds, numLedPerStrip, numStrips, offsetDisplay, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer, j, redMap, greenMap, blueMap, whiteMap, channelsPerLight,
+      pR, pG, pB); #else loadAndTranspose(leds, stripSize, numStrips, (uint16_t *)dmaBuffersTransposed[j+1]->buffer, j, redMap, greenMap, blueMap, whiteMap, channelsPerLight, pR, pG, pB);
       #endif
       */
     }
@@ -1093,7 +1093,7 @@ class I2SClocklessLedDriver {
     colors[pG] = greenMap[green];
     colors[pB] = blueMap[blue];
     uint16_t* B = (uint16_t*)dmaBuffersTransposed[posOnStrip + 1]->buffer;
-    // printf("nb c:%d\n",nbComponents);
+    // printf("channelsPerLight:%d\n",channelsPerLight);
     uint8_t y = colors[0];
     *((uint16_t*)(B)) = (*((uint16_t*)(B)) & mask) | ((uint16_t)((y & 128) >> 7) << stripNumber);
     *((uint16_t*)(B + 5)) = (*((uint16_t*)(B + 5)) & mask) | ((uint16_t)((y & 64) >> 6) << stripNumber);
@@ -1429,13 +1429,13 @@ class I2SClocklessLedDriver {
    * CANONICAL initled — the primary entry point.  All other initled() overloads
    * are convenience wrappers that translate their arguments and call this one.
    *
-   * @param leds              Pointer to the LED byte buffer (nbComponents bytes per pixel,
+   * @param leds              Pointer to the LED byte buffer (channelsPerLight bytes per pixel,
    *                          strips laid out sequentially). May be nullptr if the buffer
    *                          will be set later.
    * @param pinsq             GPIO pin numbers, one per strip (array length: numStrips).
    * @param sizes             LED count per strip (array length: numStrips).
    * @param numStrips         Number of parallel strips (max MAX_PINS).
-   * @param nbComponents      Bytes per pixel: 3 = RGB, 4 = RGBW, 5 = RGBCCT.
+   * @param channelsPerLight  Bytes per pixel: 3 = RGB, 4 = RGBW, 5 = RGBCCT.
    * @param pR                Wire-order byte offset of the Red channel.
    * @param pG                Wire-order byte offset of the Green channel.
    * @param pB                Wire-order byte offset of the Blue channel.
@@ -1443,7 +1443,7 @@ class I2SClocklessLedDriver {
    * @param pW2               Wire-order byte offset of the warm White channel (UINT8_MAX = absent).
    * @param extractWhiteFromRGB  Derive white from the minimum of R/G/B and subtract.
    */
-  void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t nbComponents, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
+  void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
     if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args numStrips=%u sizes=%p pinsq=%p", numStrips, (void*)sizes, (void*)pinsq);
       return;
@@ -1456,7 +1456,7 @@ class I2SClocklessLedDriver {
     uint16_t maximum = maxLength(sizes, numStrips);
     // Serial.printf("maximum %d\n",maximum);
     ESP_LOGD(TAG, "maximum leds %d", maximum);
-    this->nbComponents = nbComponents;
+    this->channelsPerLight = channelsPerLight;
     this->pR = pR;
     this->pG = pG;
     this->pB = pB;
@@ -1478,9 +1478,9 @@ class I2SClocklessLedDriver {
    */
   /** Convenience overload — variable strip lengths, colour order via ColorArrangement enum. */
   void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, ColorArrangement cArr = ORDER_GRB) {
-    uint8_t nbComp, r, g, b, w, w2;
-    applyColorArrangement(cArr, nbComp, r, g, b, w, w2);
-    initled(leds, pinsq, sizes, numStrips, nbComp, r, g, b, w, w2);
+    uint8_t channelsPerLight, r, g, b, w, w2;
+    applyColorArrangement(cArr, channelsPerLight, r, g, b, w, w2);
+    initled(leds, pinsq, sizes, numStrips, channelsPerLight, r, g, b, w, w2);
   }
 
   /** Initialises the driver with uniform strip lengths; cArr defaults to ORDER_GRB. */
@@ -1511,7 +1511,7 @@ class I2SClocklessLedDriver {
       for (int i = 0; i < numStrips; i++) {
         if (leddisp < stripSize[i]) {
           // ESP_LOGE(TAG,"%d :%d",leddisp+offset,mapLed(leddisp+offset));
-          hmap[offset2] = mapLed(leddisp + offset) * nbComponents;
+          hmap[offset2] = mapLed(leddisp + offset) * channelsPerLight;
           offset += stripSize[i];
           offset2++;
         }
@@ -1520,7 +1520,7 @@ class I2SClocklessLedDriver {
 #endif
   }
 
-  void setShowDelay() { showDelay = (((numLedPerStrip * 125 * 8 * nbComponents) / 100000) + 1); }
+  void setShowDelay() { showDelay = (((numLedPerStrip * 125 * 8 * channelsPerLight) / 100000) + 1); }
 
   void initLedImpl(uint8_t* leds, uint8_t* pinsq, uint8_t numStrips, uint16_t numLedPerStrip) {
     // Reset error state so retry after a failed initled() works correctly.
@@ -1583,7 +1583,7 @@ class I2SClocklessLedDriver {
       {
           for (int i = 0; i < numStrips; i++)
           {
-              hmap[i+leddisp*numStrips]=mapLed(leddisp+i*numLedPerStrip)*nbComponents;
+              hmap[i+leddisp*numStrips]=mapLed(leddisp+i*numLedPerStrip)*channelsPerLight;
           }
       }
       */
@@ -1625,7 +1625,7 @@ class I2SClocklessLedDriver {
   }
 
   // update driver: recreate dma buffers if numStrips or numLedPerStrip or dmaBuffer size changed
-  void updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t nbComponents, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX);
+  void updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX);
   // delete driver when the driver is stopped
   void deleteDriver();
 
@@ -1694,7 +1694,7 @@ class I2SClocklessLedDriver {
 
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
   #include "esp32-d0s3_i2s_impl.h"
-#elif CONFIG_IDF_TARGET_ESP32P4
+#elif CONFIG_IDF_TARGET_ESP32P4 && HAS_PARLIO_DRIVER
   #include "esp32-p4_parlio_impl.h"
 #endif
 
