@@ -59,41 +59,13 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 
   deleteDriver();  // tears down HW (GDMA/ISR on S3/ESP32, PARLIO on P4) and frees buffers
 
-  initErrorOccurred = false;
-  initSuccess = false;
+  nbDmaBuffer = dmaBuffer;  // set DMA buffer count before reinit
 
-  this->numStrips = numStrips;
-  totalLeds = 0;
-  firstIndexPerOutput[0] = 0;
-  for (int i = 0; i < numStrips; i++) {
-    stripSize[i] = sizes[i];
-    totalLeds += sizes[i];
-    if (i > 0) firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + sizes[i - 1];
-  }
-  this->numLedPerStrip = newNumLedPerStrip;
-  offsetDisplay.offsetx = 0;
-  offsetDisplay.offsety = 0;
-  offsetDisplay.panelWidth = newNumLedPerStrip;
-  offsetDisplay.panelHeight = 9999;
-  defaultOffsetDisplay = offsetDisplay;
-  linewidth = newNumLedPerStrip;
-  nbDmaBuffer = dmaBuffer;
-  this->channelsPerLight = channelsPerLight;
-  this->pR = pR;
-  this->pG = pG;
-  this->pB = pB;
-  this->pW = pW;
-  this->pW2 = pW2;
+  // Reinitialize via initled() — handles geometry setup and calls initLedImpl()
+  initled(this->leds, pinsq, sizes, numStrips, channelsPerLight, pR, pG, pB, pW, pW2);
 
-  setShowDelay();
-  setPins(pinsq);
-  if (initErrorOccurred) {
-    initSuccess = false;
-    return;
-  }
-  initTransferBuffers();
+  // Restore brightness after reinitialization
   setBrightness(brightness);
-  initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   ESP_LOGD(TAG, "updateDriver %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
 }
 
@@ -102,7 +74,6 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
  *  After this call the driver is fully quiesced; hwInit() + initTransferBuffers()
  *  are required before the next showPixels(). */
 void I2SClocklessLedDriver::deleteDriver() {
-
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
   // Tear down hardware before freeing DMA buffers so the peripheral cannot
   // continue to access memory that is about to be freed.
@@ -111,12 +82,17 @@ void I2SClocklessLedDriver::deleteDriver() {
     esp_intr_free(intrHandle);
     intrHandle = nullptr;
   }
+  // Reset and disable the I2S peripheral completely
+  periph_module_disable(I2S_DEVICE == 0 ? PERIPH_I2S0_MODULE : PERIPH_I2S1_MODULE);
   #elif CONFIG_IDF_TARGET_ESP32S3
   if (dmaChan != nullptr) {
     gdma_disconnect(dmaChan);
     gdma_del_channel(dmaChan);
     dmaChan = nullptr;
   }
+  // Reset and disable the LCD_CAM peripheral completely
+  periph_module_reset(PERIPH_LCD_CAM_MODULE);
+  periph_module_disable(PERIPH_LCD_CAM_MODULE);
   #endif
   if (transferBuffers) {
     for (int i = 0; i < nbDmaBuffer + 2; i++) {

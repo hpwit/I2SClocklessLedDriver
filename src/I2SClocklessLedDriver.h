@@ -665,6 +665,12 @@ class I2SClocklessLedDriver {
       intrHandle = nullptr;
     }
     esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3, &interruptHandler, this, &intrHandle);  // 🌙 | ESP_INTR_FLAG_IRAM removed to avoid Cache Disabled but Cached Memory Region Accessed
+    if (e != ESP_OK) {
+      ESP_LOGE(TAG, "hwInit: esp_intr_alloc failed: %s", esp_err_to_name(e));
+      intrHandle = nullptr;
+      initErrorOccurred = true;
+      return;
+    }
 #elif CONFIG_IDF_TARGET_ESP32S3
     periph_module_enable(PERIPH_LCD_CAM_MODULE);
     periph_module_reset(PERIPH_LCD_CAM_MODULE);
@@ -708,14 +714,41 @@ class I2SClocklessLedDriver {
   #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
     gdma_channel_alloc_config_t dmaChanConfig = {.sibling_chan = NULL, .direction = GDMA_CHANNEL_DIRECTION_TX, .flags = {.reserve_sibling = 0}};
     // .isr_cache_safe= true}};
-    gdma_new_ahb_channel(&dmaChanConfig, &dmaChan);  // note: s3 uses this, P4 uses gdma_new_axi_channel
+    esp_err_t err = gdma_new_ahb_channel(&dmaChanConfig, &dmaChan);  // note: s3 uses this, P4 uses gdma_new_axi_channel
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "hwInit: gdma_new_ahb_channel failed: %s", esp_err_to_name(err));
+      initErrorOccurred = true;
+      return;
+    }
   #else
     gdma_channel_alloc_config_t dmaChanConfig = {.sibling_chan = NULL, .direction = GDMA_CHANNEL_DIRECTION_TX, .flags = {.reserve_sibling = 0, .isr_cache_safe = true}};
-    gdma_new_channel(&dmaChanConfig, &dmaChan);
+    esp_err_t err = gdma_new_channel(&dmaChanConfig, &dmaChan);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "hwInit: gdma_new_channel failed: %s", esp_err_to_name(err));
+      initErrorOccurred = true;
+      return;
+    }
   #endif
-    gdma_connect(dmaChan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_LCD, 0));
+
+    err = gdma_connect(dmaChan, GDMA_MAKE_TRIGGER(GDMA_TRIG_PERIPH_LCD, 0));
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "hwInit: gdma_connect failed: %s", esp_err_to_name(err));
+      gdma_del_channel(dmaChan);
+      dmaChan = nullptr;
+      initErrorOccurred = true;
+      return;
+    }
+
     gdma_strategy_config_t strategyConfig = {.owner_check = false, .auto_update_desc = false};
-    gdma_apply_strategy(dmaChan, &strategyConfig);
+    err = gdma_apply_strategy(dmaChan, &strategyConfig);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "hwInit: gdma_apply_strategy failed: %s", esp_err_to_name(err));
+      gdma_del_channel(dmaChan);
+      dmaChan = nullptr;
+      initErrorOccurred = true;
+      return;
+    }
+
     /*
     gdma_transfer_ability_t ability = {
         .psram_trans_align = 64,
@@ -725,7 +758,14 @@ class I2SClocklessLedDriver {
 */
     // Enable DMA transfer callback
     gdma_tx_event_callbacks_t txCbs = {.on_trans_eof = interruptHandler, .on_descr_err = NULL};
-    gdma_register_tx_event_callbacks(dmaChan, &txCbs, this);
+    err = gdma_register_tx_event_callbacks(dmaChan, &txCbs, this);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "hwInit: gdma_register_tx_event_callbacks failed: %s", esp_err_to_name(err));
+      gdma_del_channel(dmaChan);
+      dmaChan = nullptr;
+      initErrorOccurred = true;
+      return;
+    }
     // esp_intr_disable((*dmaChan).intr);
     LCD_CAM.lcd_user.lcd_start = 0;
 #elif CONFIG_IDF_TARGET_ESP32P4
