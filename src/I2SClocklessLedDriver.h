@@ -444,9 +444,7 @@ class I2SClocklessLedDriver {
 
   void setPins(uint8_t* pinsq) {
     for (int i = 0; i < numStrips && i < MAX_PINS; i++) this->pins[i] = pinsq[i];
-#ifdef CONFIG_IDF_TARGET_ESP32P4
-      // P4: pin numbers stored above; the PARLIO peripheral configures GPIO routing itself.
-#elif CONFIG_IDF_TARGET_ESP32
+#ifdef CONFIG_IDF_TARGET_ESP32
     for (int i = 0; i < numStrips; i++) {
       PIN_FUNC_SELECT(GPIO_PIN_MUX_REG[pinsq[i]], PIN_FUNC_GPIO);
       gpio_set_direction((gpio_num_t)pinsq[i], (gpio_mode_t)GPIO_MODE_DEF_OUTPUT);
@@ -467,6 +465,8 @@ class I2SClocklessLedDriver {
 
       gpio_set_drive_capability((gpio_num_t)pinsq[i], GPIO_DRIVE_CAP_3);
     }
+#elif CONFIG_IDF_TARGET_ESP32P4
+      // P4: pin numbers stored above; the PARLIO peripheral configures GPIO routing itself.
 #endif
   }
 
@@ -579,18 +579,18 @@ class I2SClocklessLedDriver {
    *  src[0..nbComponents-1] — raw input in (R,G,B[,W[,W2]]) storage order.
    *  dst[0..nbComponents-1] — mapped output in wire order (pR/pG/pB/pW/pW2 indices). */
   inline void rgbwBufferMapping(const uint8_t* src, uint8_t* dst) const {
-    uint8_t red   = src[0];    // raw R from input buffer
-    uint8_t green = src[1];    // raw G from input buffer
-    uint8_t blue  = src[2];    // raw B from input buffer
+    uint8_t red = src[0];    // raw R from input buffer
+    uint8_t green = src[1];  // raw G from input buffer
+    uint8_t blue = src[2];   // raw B from input buffer
     if (pW != UINT8_MAX) {
       uint8_t white = src[3];  // raw W (or extract from RGB)
       if (extractWhiteFromRGB && !white) {
-        white  = MIN(MIN(red, green), blue);  // extract white component
-        red   -= white;    // remove white from RGB channels
+        white = MIN(MIN(red, green), blue);  // extract white component
+        red -= white;                        // remove white from RGB channels
         green -= white;
-        blue  -= white;
+        blue -= white;
       }
-      dst[pW] = whiteMap[white];         // apply white LUT to wire order
+      dst[pW] = whiteMap[white];                           // apply white LUT to wire order
       if (pW2 != UINT8_MAX) dst[pW2] = white2Map[src[4]];  // apply white2 LUT if present
     }
     dst[pR] = redMap[red];      // apply red LUT to wire order position
@@ -599,7 +599,73 @@ class I2SClocklessLedDriver {
   }
 
   void hwInit() {
-#ifdef CONFIG_IDF_TARGET_ESP32S3
+#ifdef CONFIG_IDF_TARGET_ESP32
+    int interruptSource;
+    if (I2S_DEVICE == 0) {
+      i2s = &I2S0;
+      periph_module_enable(PERIPH_I2S0_MODULE);
+      interruptSource = ETS_I2S0_INTR_SOURCE;
+      i2sBasePinIndex = I2S0O_DATA_OUT0_IDX;
+    } else {
+      i2s = &I2S1;
+      periph_module_enable(PERIPH_I2S1_MODULE);
+      interruptSource = ETS_I2S1_INTR_SOURCE;
+      i2sBasePinIndex = I2S1O_DATA_OUT0_IDX;
+    }
+
+    i2sReset();
+    i2sResetDma();
+    i2sResetFifo();
+    i2s->conf.tx_right_first = 0;
+
+    // -- Set parallel mode
+    i2s->conf2.val = 0;
+    i2s->conf2.lcd_en = 1;
+    i2s->conf2.lcd_tx_wrx2_en = 1;  // 0 for 16 or 32 parallel output
+    i2s->conf2.lcd_tx_sdx2_en = 0;  // HN
+
+    // -- Set up the clock rate and sampling
+    i2s->sample_rate_conf.val = 0;
+    i2s->sample_rate_conf.tx_bits_mod = 16;  // Number of parallel bits/pins
+    i2s->clkm_conf.val = 0;
+
+    i2s->clkm_conf.clka_en = 0;
+
+    // add the capability of going a bit faster
+    i2s->clkm_conf.clkm_div_a = 3;     // CLOCK_DIVIDER_A;
+    i2s->clkm_conf.clkm_div_b = 1;     // CLOCK_DIVIDER_B;
+    i2s->clkm_conf.clkm_div_num = 33;  // CLOCK_DIVIDER_N;
+
+    i2s->fifo_conf.val = 0;
+    i2s->fifo_conf.tx_fifo_mod_force_en = 1;
+    i2s->fifo_conf.tx_fifo_mod = 1;   // 16-bit single channel data
+    i2s->fifo_conf.tx_data_num = 32;  // 32; // fifo length
+    i2s->fifo_conf.dscr_en = 1;       // fifo will use dma
+    i2s->sample_rate_conf.tx_bck_div_num = 1;
+    i2s->conf1.val = 0;
+    i2s->conf1.tx_stop_en = 0;
+    i2s->conf1.tx_pcm_bypass = 1;
+
+    i2s->conf_chan.val = 0;
+    i2s->conf_chan.tx_chan_mod = 1;  // Mono mode, with tx_msb_right = 1, everything goes to right-channel
+
+    i2s->timing.val = 0;
+    i2s->int_ena.val = 0;
+    /*
+    // -- Allocate i2s interrupt
+    SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ENA_V,1, I2S_OUT_EOF_INT_ENA_S);
+    SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
+    SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
+    */
+    // Free any previously registered interrupt before registering a new one.
+    // hwInit() is called once from initLedImpl(); if deleteDriver()+initled() is used,
+    // this guard frees the old handle so esp_intr_alloc() does not leak it.
+    if (intrHandle != nullptr) {
+      esp_intr_free(intrHandle);
+      intrHandle = nullptr;
+    }
+    esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3, &interruptHandler, this, &intrHandle);  // 🌙 | ESP_INTR_FLAG_IRAM removed to avoid Cache Disabled but Cached Memory Region Accessed
+#elif CONFIG_IDF_TARGET_ESP32S3
     periph_module_enable(PERIPH_LCD_CAM_MODULE);
     periph_module_reset(PERIPH_LCD_CAM_MODULE);
 
@@ -662,66 +728,79 @@ class I2SClocklessLedDriver {
     gdma_register_tx_event_callbacks(dmaChan, &txCbs, this);
     // esp_intr_disable((*dmaChan).intr);
     LCD_CAM.lcd_user.lcd_start = 0;
-#elif CONFIG_IDF_TARGET_ESP32
-    int interruptSource;
-    if (I2S_DEVICE == 0) {
-      i2s = &I2S0;
-      periph_module_enable(PERIPH_I2S0_MODULE);
-      interruptSource = ETS_I2S0_INTR_SOURCE;
-      i2sBasePinIndex = I2S0O_DATA_OUT0_IDX;
-    } else {
-      i2s = &I2S1;
-      periph_module_enable(PERIPH_I2S1_MODULE);
-      interruptSource = ETS_I2S1_INTR_SOURCE;
-      i2sBasePinIndex = I2S1O_DATA_OUT0_IDX;
+#elif CONFIG_IDF_TARGET_ESP32P4
+    // P4: no semaphore setup needed (PARLIO setup deferred to initTransferBuffers())
+    return;
+#endif
+    // -- Create a semaphore to block execution until all the controllers are done
+
+    if (sem == NULL) {
+      sem = xSemaphoreCreateBinary();
     }
 
-    i2sReset();
-    i2sResetDma();
-    i2sResetFifo();
-    i2s->conf.tx_right_first = 0;
+    if (semSync == NULL) {
+      semSync = xSemaphoreCreateBinary();
+    }
+    if (semDisp == NULL) {
+      semDisp = xSemaphoreCreateBinary();
+    }
+  }
 
-    // -- Set parallel mode
-    i2s->conf2.val = 0;
-    i2s->conf2.lcd_en = 1;
-    i2s->conf2.lcd_tx_wrx2_en = 1;  // 0 for 16 or 32 parallel output
-    i2s->conf2.lcd_tx_sdx2_en = 0;  // HN
-
-    // -- Set up the clock rate and sampling
-    i2s->sample_rate_conf.val = 0;
-    i2s->sample_rate_conf.tx_bits_mod = 16;  // Number of parallel bits/pins
-    i2s->clkm_conf.val = 0;
-
-    i2s->clkm_conf.clka_en = 0;
-
-    // add the capability of going a bit faster
-    i2s->clkm_conf.clkm_div_a = 3;     // CLOCK_DIVIDER_A;
-    i2s->clkm_conf.clkm_div_b = 1;     // CLOCK_DIVIDER_B;
-    i2s->clkm_conf.clkm_div_num = 33;  // CLOCK_DIVIDER_N;
-
-    i2s->fifo_conf.val = 0;
-    i2s->fifo_conf.tx_fifo_mod_force_en = 1;
-    i2s->fifo_conf.tx_fifo_mod = 1;   // 16-bit single channel data
-    i2s->fifo_conf.tx_data_num = 32;  // 32; // fifo length
-    i2s->fifo_conf.dscr_en = 1;       // fifo will use dma
-    i2s->sample_rate_conf.tx_bck_div_num = 1;
-    i2s->conf1.val = 0;
-    i2s->conf1.tx_stop_en = 0;
-    i2s->conf1.tx_pcm_bypass = 1;
-
-    i2s->conf_chan.val = 0;
-    i2s->conf_chan.tx_chan_mod = 1;  // Mono mode, with tx_msb_right = 1, everything goes to right-channel
-
-    i2s->timing.val = 0;
-    i2s->int_ena.val = 0;
+  void initTransferBuffers() {
     /*
-    // -- Allocate i2s interrupt
-    SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_EOF_INT_ENA_V,1, I2S_OUT_EOF_INT_ENA_S);
-    SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
-    SET_PERI_REG_BITS(I2S_INT_ENA_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ENA_V, 1, I2S_OUT_TOTAL_EOF_INT_ENA_S);
+    transferBuffers[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
+    transferBuffers[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    transferBuffers[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    transferBuffers[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+
+    putdefaultones((uint16_t *)transferBuffers[0]->buffer);
+    putdefaultones((uint16_t *)transferBuffers[1]->buffer);
     */
-    esp_err_t e = esp_intr_alloc(interruptSource, ESP_INTR_FLAG_INTRDISABLED | ESP_INTR_FLAG_LEVEL3, &interruptHandler, this, &intrHandle);  // 🌙 | ESP_INTR_FLAG_IRAM removed to avoid Cache Disabled but Cached Memory Region Accessed
+
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+  #ifdef CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
+    transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
+  #elif CONFIG_IDF_TARGET_ESP32S3
+    transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+  #endif
+    if (!transferBuffers) {
+      ESP_LOGE(TAG, "Failed to allocate transferBuffers!");
+      initErrorOccurred = true;
+      return;
+    }
+
+    for (int i = 0; i < nbDmaBuffer + 1; i++) {
+      transferBuffers[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
+    }
+    transferBuffers[nbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
+
+    for (int i = 0; i < nbDmaBuffer; i++) {
+      putdefaultones((uint16_t*)transferBuffers[i]->buffer);
+    }
+
 #elif CONFIG_IDF_TARGET_ESP32P4
+    // Allocate ping-pong waveform buffers for PARLIO DMA.
+    if (!p4Buffer1) {
+      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+      if (!p4Buffer1) {
+        ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer1 — out of memory");
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    if (!p4Buffer2) {
+      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+      if (!p4Buffer2) {
+        ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer2 — out of memory");
+        heap_caps_free(p4Buffer1);
+        p4Buffer1 = nullptr;
+        p4BufferActive = nullptr;
+        initErrorOccurred = true;
+        return;
+      }
+    }
+    p4BufferActive = p4Buffer1;
+
   // Configure (or reconfigure) the PARLIO TX unit.
   #if !HAS_PARLIO_DRIVER
     ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
@@ -732,7 +811,7 @@ class I2SClocklessLedDriver {
     {
       uint8_t outputs = numStrips;
       if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH) {
-        ESP_LOGE(TAG, "hwInit: numStrips (%u) exceeds SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH (%u)", outputs, SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH);
+        ESP_LOGE(TAG, "initTransferBuffers: numStrips (%u) exceeds SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH (%u)", outputs, SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH);
         initErrorOccurred = true;
         return;
       }
@@ -780,21 +859,21 @@ class I2SClocklessLedDriver {
 
       if (p4TxUnit != NULL) {
         esp_err_t err;
-        if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "hwInit: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
-        if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "hwInit: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
-        if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "hwInit: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
+        if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "initTransferBuffers: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+        if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "initTransferBuffers: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+        if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "initTransferBuffers: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
         p4TxUnit = NULL;
       }
 
       esp_err_t err;
       if ((err = parlio_new_tx_unit(&p4Config, &p4TxUnit)) != ESP_OK) {
-        ESP_LOGE(TAG, "hwInit: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "initTransferBuffers: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
         p4TxUnit = NULL;
         initErrorOccurred = true;
         return;
       }
       if ((err = parlio_tx_unit_enable(p4TxUnit)) != ESP_OK) {
-        ESP_LOGE(TAG, "hwInit: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "initTransferBuffers: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
         parlio_del_tx_unit(p4TxUnit);
         p4TxUnit = NULL;
         initErrorOccurred = true;
@@ -803,81 +882,7 @@ class I2SClocklessLedDriver {
 
       ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)", (unsigned)outputs, (unsigned)max_leds);
     }
-    return;  // P4: skip S3/ESP32 semaphore creation below
-#endif
-    // -- Create a semaphore to block execution until all the controllers are done
-
-    if (sem == NULL) {
-      sem = xSemaphoreCreateBinary();
-    }
-
-    if (semSync == NULL) {
-      semSync = xSemaphoreCreateBinary();
-    }
-    if (semDisp == NULL) {
-      semDisp = xSemaphoreCreateBinary();
-    }
-  }
-
-  void initTransferBuffers() {
-    /*
-    transferBuffers[0] = allocateDMABuffer(nbComponents * 8 * 2 * 3); // the buffers for the
-    transferBuffers[1] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    transferBuffers[2] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    transferBuffers[3] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
-
-    putdefaultones((uint16_t *)transferBuffers[0]->buffer);
-    putdefaultones((uint16_t *)transferBuffers[1]->buffer);
-    */
-
-#ifdef CONFIG_IDF_TARGET_ESP32S3
-    transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
-    if (!transferBuffers) {
-      ESP_LOGE(TAG, "Failed to allocate transferBuffers!");
-      initErrorOccurred = true;
-      return;
-    }
-#elif CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
-    transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
-    if (!transferBuffers) {
-      ESP_LOGE(TAG, "Failed to allocate transferBuffers!");
-      initErrorOccurred = true;
-      return;
-    }
-#elif CONFIG_IDF_TARGET_ESP32P4
-    // Allocate ping-pong waveform buffers for PARLIO DMA.
-    if (!p4Buffer1) {
-      p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-      if (!p4Buffer1) {
-        ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer1 — out of memory");
-        initErrorOccurred = true;
-        return;
-      }
-    }
-    if (!p4Buffer2) {
-      p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
-      if (!p4Buffer2) {
-        ESP_LOGE(TAG, "initTransferBuffers: failed to allocate p4Buffer2 — out of memory");
-        heap_caps_free(p4Buffer1);
-        p4Buffer1 = nullptr;
-        p4BufferActive = nullptr;
-        initErrorOccurred = true;
-        return;
-      }
-    }
-    p4BufferActive = p4Buffer1;
     return;  // P4 done; skip S3/ESP32 DMA buffer setup below
-#endif
-
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-    for (int i = 0; i < nbDmaBuffer + 1; i++) {
-      transferBuffers[i] = allocateDMABuffer(nbComponents * 8 * 2 * 3);
-    }
-    transferBuffers[nbDmaBuffer + 1] = allocateDMABuffer(nbComponents * 8 * 2 * 3 * 4);
-
-    for (int i = 0; i < nbDmaBuffer; i++) {
-      putdefaultones((uint16_t*)transferBuffers[i]->buffer);
-    }
 #endif
 
 #ifdef FULL_DMA_BUFFER
@@ -1327,7 +1332,7 @@ class I2SClocklessLedDriver {
 
     ledToDisplay = 0;
     transpose = true;
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
   #ifdef CONFIG_IDF_TARGET_ESP32
     for (int buffNum = 0; buffNum < nbDmaBuffer - 1; buffNum++) {
       transferBuffers[buffNum]->descriptor.qe.stqe_next = &(transferBuffers[buffNum + 1]->descriptor);
@@ -1615,7 +1620,7 @@ class I2SClocklessLedDriver {
   typedef dma_descriptor_t I2SClocklessLedDriverDMABuffer;
 #endif
 
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
   // buffer array for the transposed leds
   I2SClocklessLedDriverDMABuffer** dmaBuffersTransposed = NULL;
   // buffer array for the regular way
@@ -1674,10 +1679,10 @@ class I2SClocklessLedDriver {
   // static void IRAM_ATTR interruptHandler(void *arg);
 };
 
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-  #include "i2s_impl.h"
-#elif defined(CONFIG_IDF_TARGET_ESP32P4)
-  #include "parlio_p4_impl.h"
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+  #include "esp32-d0s3_i2s_impl.h"
+#elif CONFIG_IDF_TARGET_ESP32P4
+  #include "esp32-p4_parlio_impl.h"
 #endif
 
 #endif  // I2S_CLOCKLESS_DRIVER_H

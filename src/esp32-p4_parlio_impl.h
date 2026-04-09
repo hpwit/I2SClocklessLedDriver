@@ -1,6 +1,6 @@
 /**
     @title     I2SClocklessLedDriver
-    @file      parlio_p4_impl.h
+    @file      esp32-p4_parlio_impl.h
     @repo      https://github.com/hpwit/I2SClocklessLedDriver
     @Authors   Original PARLIO implementation: @troyhacks (https://github.com/troyhacks)
                Extended by @ewowi (https://github.com/ewowi):
@@ -34,7 +34,7 @@
 #define TAG "🐸P4"
 
 static_assert(SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH <= 16,
-              "parlio_p4_impl.h assumes max data width <= 16 (bit-packing/shift logic).");
+              "esp32-p4_parlio_impl.h assumes max data width <= 16 (bit-packing/shift logic).");
 
 // ---------------------------------------------------------------------------
 // Bit-transposition helpers
@@ -42,15 +42,15 @@ static_assert(SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH <= 16,
 namespace LedMatrixDetail {
 
 /**
- * transpose_32_slices — for one colour component across all pins, produce 32
+ * transposeColorChannel — for one colour component across all pins, produce 32
  * time-slice words (one per WS2812 clock tick) that encode the parallel output.
  */
-inline void transpose_32_slices(uint32_t (&transposed_slices)[32],
-                                 uint8_t* mappedBuffer,
-                                 const uint8_t component_in_pixel,
-                                 const uint32_t num_active_pins,
-                                 const uint8_t COMPONENTS_PER_PIXEL,
-                                 const uint32_t* waveform_cache) {
+inline void transposeColorChannel(uint32_t (&transposed_slices)[32],
+                                   uint8_t* mappedBuffer,
+                                   const uint8_t component_in_pixel,
+                                   const uint32_t num_active_pins,
+                                   const uint8_t COMPONENTS_PER_PIXEL,
+                                   const uint32_t* waveform_cache) {
     memset(transposed_slices, 0, sizeof(uint32_t) * 32);
 
     for (uint32_t pin = 0; pin < num_active_pins; ++pin) {
@@ -245,7 +245,7 @@ static void create_transposed_led_output_optimized(
         for (uint32_t component_in_pixel = 0; component_in_pixel < COMPONENTS_PER_PIXEL; ++component_in_pixel) {
             uint32_t transposed_slices[32];
 
-            LedMatrixDetail::transpose_32_slices(transposed_slices, mappedBuffer,
+            LedMatrixDetail::transposeColorChannel(transposed_slices, mappedBuffer,
                                                   component_in_pixel, num_active_pins,
                                                   COMPONENTS_PER_PIXEL, waveform_cache);
 

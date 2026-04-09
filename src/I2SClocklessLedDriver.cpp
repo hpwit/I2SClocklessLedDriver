@@ -87,7 +87,6 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 
   setShowDelay();
   setPins(pinsq);
-  hwInit();
   if (initErrorOccurred) {
     initSuccess = false;
     return;
@@ -104,19 +103,19 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
  *  are required before the next showPixels(). */
 void I2SClocklessLedDriver::deleteDriver() {
 
-#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
   // Tear down hardware before freeing DMA buffers so the peripheral cannot
   // continue to access memory that is about to be freed.
-  #ifdef CONFIG_IDF_TARGET_ESP32S3
+  #ifdef CONFIG_IDF_TARGET_ESP32
+  if (intrHandle != nullptr) {
+    esp_intr_free(intrHandle);
+    intrHandle = nullptr;
+  }
+  #elif CONFIG_IDF_TARGET_ESP32S3
   if (dmaChan != nullptr) {
     gdma_disconnect(dmaChan);
     gdma_del_channel(dmaChan);
     dmaChan = nullptr;
-  }
-  #else  // CONFIG_IDF_TARGET_ESP32
-  if (intrHandle != nullptr) {
-    esp_intr_free(intrHandle);
-    intrHandle = nullptr;
   }
   #endif
   if (transferBuffers) {

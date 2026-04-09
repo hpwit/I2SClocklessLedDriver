@@ -134,12 +134,12 @@ src/
   │                               #includes the platform impl header after the class closes
   I2SClocklessLedDriver.cpp    — updateDriver(), deleteDriver()
   colorarrangement.h           — ColorArrangement enum + applyColorArrangement()  ✅ done
-  i2s_impl.h                   — ESP32-D0 + ESP32-S3: out-of-class method bodies for
+  esp32-d0s3_i2s_impl.h        — ESP32-D0 + ESP32-S3: out-of-class method bodies for
   │                               allocateDMABuffer, putdefaultones, hwStart, i2sReset,
   │                               hwStop (static), interruptHandler (static, two variants),
   │                               transpose16x1Noinline2 (static), loadAndTranspose (static)
   │                               S3/ESP32 branches kept via existing #ifdef guards  ✅ done (Phase 8)
-  parlio_p4_impl.h             — ESP32-P4:  out-of-class method bodies  ✅ done (Phase 5)
+  esp32-p4_parlio_impl.h       — ESP32-P4:  out-of-class method bodies  ✅ done (Phase 5)
   pixeltypes.h                 — unchanged
   framebuffer.h                — unchanged
   helper.h                     — unchanged
@@ -217,7 +217,7 @@ Note: the `if (::hwInit(this)) { return; }` warm-up guard that currently lives i
 ### What leaves `I2SClocklessLedDriver.h`
 
 - **`ColorArrangement` enum and `switch(cArr)` decoder** ✅ (Phase 2): moved to `src/colorarrangement.h`.
-- **P4 PARLIO method bodies** (Phase 5): move from `parlio_p4.cpp` to `parlio_p4_impl.h`; free-function declarations in `parlio_p4.h` replaced by class method declarations in the class body.
+- **P4 PARLIO method bodies** (Phase 5): move from `parlio_p4.cpp` to `esp32-p4_parlio_impl.h`; free-function declarations in `parlio_p4.h` replaced by class method declarations in the class body.
 - **ESP32/S3 I2S method bodies** (Phase 6): `hwInit`, `initTransferBuffers`, `allocateDMABuffer`, `hwStart`, `hwStop`, `loadAndTranspose`, `interruptHandler`, `transpose16x1Noinline2` move to `i2s_esp32_impl.h` / `i2s_esp32s3_impl.h`.  The class retains the declarations.
 
 ### What stays in `I2SClocklessLedDriver.h`
@@ -354,18 +354,18 @@ Result: `initLedImpl` and `updateDriver` become structurally identical across al
 Changes:
 1. Add `#elif CONFIG_IDF_TARGET_ESP32P4` branches to the existing inline `hwInit()` and `initTransferBuffers()` class methods — P4 body inline alongside the existing S3/ESP32 branches.
 2. Add P4-only method declarations to the class body (guarded by `#ifdef CONFIG_IDF_TARGET_ESP32P4`): `void loadAndTranspose()`, `void hwStart()`, `void hwStop()`.
-3. Create `src/parlio_p4_impl.h` with `inline` out-of-class definitions for those three methods, plus all PARLIO helpers (`LedMatrixDetail` namespace, `rgbwBufferMapping`, `create_transposed_led_output_optimized`, `transmit_config`).
+3. Create `src/esp32-p4_parlio_impl.h` with `inline` out-of-class definitions for those three methods, plus all PARLIO helpers (`LedMatrixDetail` namespace, `rgbwBufferMapping`, `create_transposed_led_output_optimized`, `transmit_config`).
 4. Replace `#include "parlio_p4.h"` in the P4 includes block with the `PARLIO_P4_BUFFER_BYTES` constant definition.
-5. Add `#include "parlio_p4_impl.h"` at the bottom of `I2SClocklessLedDriver.h` inside `#ifdef CONFIG_IDF_TARGET_ESP32P4`.
-6. Delete `parlio_p4.h` and `parlio_p4.cpp` — all content now lives in the header via inline branches and `parlio_p4_impl.h`.
+5. Add `#include "esp32-p4_parlio_impl.h"` at the bottom of `I2SClocklessLedDriver.h` inside `#ifdef CONFIG_IDF_TARGET_ESP32P4`.
+6. Delete `parlio_p4.h` and `parlio_p4.cpp` — all content now lives in the header via inline branches and `esp32-p4_parlio_impl.h`.
 7. In `showPixelsImpl`, `initLedImpl`, and `updateDriver`: replace `::hwInit(this)`, `::loadAndTranspose(this)`, etc. with plain `hwInit()`, `loadAndTranspose()`, etc.
 
 Result: all three targets call the same names with the same syntax.  The `::` workaround introduced in Phase 3 is gone.  `I2SClocklessLedDriver.h` bottom section becomes (after Phase 8):
 ```cpp
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-  #include "i2s_impl.h"       // ✅ Phase 8
+  #include "esp32-d0s3_i2s_impl.h"       // ✅ Phase 8
 #elif defined(CONFIG_IDF_TARGET_ESP32P4)
-  #include "parlio_p4_impl.h" // ✅ this phase
+  #include "esp32-p4_parlio_impl.h" // ✅ this phase
 #endif
 ```
 
@@ -423,22 +423,22 @@ Both call sites (`showPixelsImpl` normal path and `FULL_DMA_BUFFER` path) now ca
 
 ### Phase 8 — Extract ESP32/S3 method bodies to platform impl headers ✅ done
 
-*Goal:* `I2SClocklessLedDriver.h` shrinks to class declaration + method declarations + thin dispatch block.  The large ESP32/S3 function bodies move to a single `i2s_impl.h` that is `#include`d back after the class definition closes, following the pattern established by Phase 5.
+*Goal:* `I2SClocklessLedDriver.h` shrinks to class declaration + method declarations + thin dispatch block.  The large ESP32/S3 function bodies move to a single `esp32-d0s3_i2s_impl.h` that is `#include`d back after the class definition closes, following the pattern established by Phase 5.
 
 What was done:
-1. Created `src/i2s_impl.h` containing out-of-class definitions for both S3 and ESP32 (existing `#ifdef` guards separate the two): `allocateDMABuffer()`, `putdefaultones()`, `hwStart()`, `i2sReset()` as `inline I2SClocklessLedDriver::` methods; plus `hwStop()`, `interruptHandler()` (two variants), `transpose16x1Noinline2()`, `loadAndTranspose()` as static free functions.
+1. Created `src/esp32-d0s3_i2s_impl.h` containing out-of-class definitions for both S3 and ESP32 (existing `#ifdef` guards separate the two): `allocateDMABuffer()`, `putdefaultones()`, `hwStart()`, `i2sReset()` as `inline I2SClocklessLedDriver::` methods; plus `hwStop()`, `interruptHandler()` (two variants), `transpose16x1Noinline2()`, `loadAndTranspose()` as static free functions.
 2. Replaced inline bodies in the class body with bare declarations inside `#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32`.
-3. Replaced the old `#ifndef CONFIG_IDF_TARGET_ESP32P4 … #else #include "parlio_p4_impl.h" #endif` dispatch with:
+3. Replaced the old `#ifndef CONFIG_IDF_TARGET_ESP32P4 … #else #include "esp32-p4_parlio_impl.h" #endif` dispatch with:
    ```cpp
    #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
-     #include "i2s_impl.h"
+     #include "esp32-d0s3_i2s_impl.h"
    #elif defined(CONFIG_IDF_TARGET_ESP32P4)
-     #include "parlio_p4_impl.h"
+     #include "esp32-p4_parlio_impl.h"
    #endif
    ```
 4. `hwInit()` and `initTransferBuffers()` kept in the class body (they have P4 branches and are smaller than the extracted functions).
 
-Result: `I2SClocklessLedDriver.h` dropped from ~2100 lines to ~1660 lines; 458 lines extracted to `i2s_impl.h`.
+Result: `I2SClocklessLedDriver.h` dropped from ~2100 lines to ~1660 lines; 458 lines extracted to `esp32-d0s3_i2s_impl.h`.
 
 ### Phase 9 — Common LUT application layer ✅ done
 
@@ -446,7 +446,7 @@ Result: `I2SClocklessLedDriver.h` dropped from ~2100 lines to ~1660 lines; 458 l
 
 What was done:
 1. Added `inline void rgbwBufferMapping(const uint8_t* src, uint8_t* dst) const` to the class body (no platform guard). Reads raw R,G,B[,W[,W2]] from `src`, applies white extraction, LUT tables, and channel reorder, writes mapped values to `dst[pR/pG/pB/pW/pW2]`.
-2. In `i2s_impl.h` `loadAndTranspose`: replaced the ~15-line inline LUT block with `driver->rgbwBufferMapping(poli, mapped)` + a loop copying `mapped[c]` into `secondPixel[c].bytes[i]`.
-3. In `parlio_p4_impl.h`: removed `rgbwBufferMapping` static free function (now a shared class method); replaced its call in `create_transposed_led_output_optimized` with `driver->rgbwBufferMapping(...)`; dropped the now-unused `offsetR/G/B/W/W2` parameters from `create_transposed_led_output_optimized` and its call site.
+2. In `esp32-d0s3_i2s_impl.h` `loadAndTranspose`: replaced the ~15-line inline LUT block with `driver->rgbwBufferMapping(poli, mapped)` + a loop copying `mapped[c]` into `secondPixel[c].bytes[i]`.
+3. In `esp32-p4_parlio_impl.h`: removed `rgbwBufferMapping` static free function (now a shared class method); replaced its call in `create_transposed_led_output_optimized` with `driver->rgbwBufferMapping(...)`; dropped the now-unused `offsetR/G/B/W/W2` parameters from `create_transposed_led_output_optimized` and its call site.
 
 Note: `rgbwBufferMapping` is `inline` so the compiler will typically inline it into `loadAndTranspose` (ISR context on ESP32/S3) with no call overhead. Benchmark before/after to confirm timing is unchanged.
