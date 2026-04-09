@@ -829,6 +829,13 @@ class I2SClocklessLedDriver {
       else
         p4Config.data_width = 16;
 
+      const uint32_t required_bytes = ((uint32_t)max_leds * nbComponents * 32u * p4Config.data_width + 7u) / 8u;
+      if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
+        ESP_LOGE(TAG, "hwInit: configuration requires %u bytes, but only %u are allocated", (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES);
+        initErrorOccurred = true;
+        return;
+      }
+
       p4Config.clk_in_gpio_num = gpio_num_t(-1);
       p4Config.valid_gpio_num = gpio_num_t(-1);
       p4Config.clk_out_gpio_num = gpio_num_t(-1);
@@ -1309,15 +1316,21 @@ class I2SClocklessLedDriver {
 
   void showPixelsImpl() {
     if (!enableDriver) {
+      isDisplaying = false;
+      if (waitDisp != NULL) xSemaphoreGive(waitDisp);
       return;
     }
 
     if (!initSuccess) {
+      isDisplaying = false;
+      if (waitDisp != NULL) xSemaphoreGive(waitDisp);
       return;
     }
 
     if (leds == NULL) {
       ESP_LOGE(TAG, "no leds buffer defined");
+      isDisplaying = false;
+      if (waitDisp != NULL) xSemaphoreGive(waitDisp);
       return;
     }
 

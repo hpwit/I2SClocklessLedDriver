@@ -57,9 +57,9 @@ The ESP32-P4 does not have an I2S peripheral, so the parallel LED output is driv
 Instead of filling a DMA descriptor ring (ESP32/S3 approach), the P4 driver:
 
 1. **Transposes** the raw `leds[]` byte buffer into a packed waveform buffer (`parallel_buffer_repacked`), applying brightness/gamma LUT tables for every channel in the same pass.
-2. **Encodes** each LED bit as 4 clock cycles (`1000` = 0-bit, `1110` = 1-bit at 800 kHz × 4 = 3.2 MHz clock).  Both nibbles of a byte are looked up simultaneously via a 256-entry `waveform_cache[]`.
+2. **Encodes** each LED bit as 3-tick patterns (`100` = 0-bit, `110` = 1-bit) using the `bitpatterns[]` lookup table. Both nibbles of a byte are looked up simultaneously via a 256-entry `waveform_cache[]`.
 3. **Packs** the per-pin bits into the PARLIO data width (1/2/4/8/16-bit) using optimized `process_Nbit()` helpers in the `LedMatrixDetail` namespace.
-4. **Chunks** the output into ≤65535-byte transfers to respect the PARLIO DMA hardware limit, queuing up to 4 chunks per frame.
+4. **Chunks** the output into ≤65535-byte transfers to respect the PARLIO DMA hardware limit, queuing as many chunks as needed per frame (no hard 4-chunk cap).
 5. **Ping-pongs** between two waveform buffers so the CPU can build the next frame while the PARLIO unit streams the current one.
 
 ### Variable strip lengths (padding — feature by @ewowi)

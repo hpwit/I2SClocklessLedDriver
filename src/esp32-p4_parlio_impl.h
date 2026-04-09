@@ -355,7 +355,10 @@ inline void I2SClocklessLedDriver::hwStop() {
     int64_t before = esp_timer_get_time();
     ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY));
     int64_t after = esp_timer_get_time();
-    if (after - before < 50) esp_rom_delay_us(20);
+    int64_t transfer_time_us = after - before;
+    if (transfer_time_us < 50) {
+        esp_rom_delay_us(50 - transfer_time_us);
+    }
 }
 
 #endif  // CONFIG_IDF_TARGET_ESP32P4
