@@ -54,12 +54,16 @@ inline void transpose_32_slices(uint32_t (&transposed_slices)[32],
     memset(transposed_slices, 0, sizeof(uint32_t) * 32);
 
     for (uint32_t pin = 0; pin < num_active_pins; ++pin) {
+        // index into mappedBuffer for this colour channel on this pin
         const uint32_t component_idx = (pin * COMPONENTS_PER_PIXEL) + component_in_pixel;
+        // LUT-mapped 8-bit colour value for this pin
         const uint8_t  data_byte     = mappedBuffer[component_idx];
+        // 32-bit waveform encoding (4 bytes × 8 bits = 32 time slices)
         const uint32_t waveform      = waveform_cache[data_byte];
+        // bit mask for this output pin (positions in parallel word)
         const uint32_t pin_bit       = (1u << pin);
 
-        uint8_t b;
+        uint8_t b;  // current byte under processing
 
         b = waveform & 0xFF;
         if ((b >> 7) & 1) transposed_slices[0]  |= pin_bit;
@@ -111,8 +115,9 @@ inline void __attribute__((hot)) process_1bit(uint8_t* buffer, const uint32_t* t
     reinterpret_cast<uint32_t*>(buffer)[0] = packed_word;
 }
 
+// Pack 32 time slices into 2-bit parallel words (2 outputs).
 inline void __attribute__((hot)) process_2bit(uint8_t* buffer, const uint32_t* transposed_slices) {
-    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
+    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);  // output as 32-bit words
     uint32_t word0 = 0, word1 = 0;
     for (int i = 0; i < 16; ++i) word0 |= (transposed_slices[i]      << (i * 2));
     for (int i = 0; i < 16; ++i) word1 |= (transposed_slices[i + 16] << (i * 2));
@@ -120,8 +125,9 @@ inline void __attribute__((hot)) process_2bit(uint8_t* buffer, const uint32_t* t
     out[1] = word1;
 }
 
+// Pack 32 time slices into 4-bit parallel words (4 outputs).
 inline void __attribute__((hot)) process_4bit(uint8_t* buffer, const uint32_t* transposed_slices) {
-    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
+    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);  // output as 32-bit words
     uint32_t word0 = 0, word1 = 0, word2 = 0, word3 = 0;
     for (int i = 0; i < 8; ++i) word0 |= (transposed_slices[i]      << (i * 4));
     for (int i = 0; i < 8; ++i) word1 |= (transposed_slices[i +  8] << (i * 4));
@@ -130,10 +136,11 @@ inline void __attribute__((hot)) process_4bit(uint8_t* buffer, const uint32_t* t
     out[0] = word0; out[1] = word1; out[2] = word2; out[3] = word3;
 }
 
+// Pack 32 time slices into 8-bit parallel words (8 outputs).
 inline void __attribute__((hot)) process_8bit(uint8_t* buffer, const uint32_t* transposed_slices) {
-    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
+    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);  // output as 32-bit words
     for (int i = 0; i < 8; ++i) {
-        const int base = i * 4;
+        const int base = i * 4;  // base index for this 32-bit word
         out[i] = (transposed_slices[base + 0])        |
                  (transposed_slices[base + 1] <<  8)  |
                  (transposed_slices[base + 2] << 16)  |
@@ -141,10 +148,11 @@ inline void __attribute__((hot)) process_8bit(uint8_t* buffer, const uint32_t* t
     }
 }
 
+// Pack 32 time slices into 16-bit parallel words (16 outputs).
 inline void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t* transposed_slices) {
-    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);
+    uint32_t* out = reinterpret_cast<uint32_t*>(buffer);  // output as 32-bit words
     for (int i = 0; i < 16; ++i) {
-        const int base = i * 2;
+        const int base = i * 2;  // base index for this 32-bit word
         out[i] = (transposed_slices[base + 0]) | (transposed_slices[base + 1] << 16);
     }
 }
@@ -152,45 +160,6 @@ inline void __attribute__((hot)) process_16bit(uint16_t* buffer, const uint32_t*
 }  // namespace LedMatrixDetail
 
 // ---------------------------------------------------------------------------
-// Per-pixel colour mapping  (brightness + gamma LUTs, wire-order repack)
-// ---------------------------------------------------------------------------
-
-/**
- * rgbwBufferMapping — apply driver LUT tables and repack one pixel's colour
- * channels into wire order.
- */
-static void rgbwBufferMapping(uint8_t* packetRGBChannel,
-                               const uint8_t* lightsRGBChannel,
-                               const uint8_t offsetRed,
-                               const uint8_t offsetGreen,
-                               const uint8_t offsetBlue,
-                               const uint8_t offsetWhite,
-                               const uint8_t offsetWhite2,
-                               I2SClocklessLedDriver* driver) {
-    uint8_t red   = lightsRGBChannel[0];
-    uint8_t green = lightsRGBChannel[1];
-    uint8_t blue  = lightsRGBChannel[2];
-
-    if (offsetWhite != UINT8_MAX) {
-        uint8_t white = lightsRGBChannel[3];
-        if (driver->extractWhiteFromRGB && !white) {
-            white  = MIN(MIN(red, green), blue);
-            red   -= white;
-            green -= white;
-            blue  -= white;
-        }
-        packetRGBChannel[offsetWhite] = driver->whiteMap[white];
-    }
-
-    if (offsetWhite2 != UINT8_MAX) {
-        packetRGBChannel[offsetWhite2] = driver->white2Map[lightsRGBChannel[4]];
-    }
-
-    packetRGBChannel[offsetRed]   = driver->redMap[red];
-    packetRGBChannel[offsetGreen] = driver->greenMap[green];
-    packetRGBChannel[offsetBlue]  = driver->blueMap[blue];
-}
-
 // ---------------------------------------------------------------------------
 // Main transposition pass
 // ---------------------------------------------------------------------------
@@ -198,6 +167,7 @@ static void rgbwBufferMapping(uint8_t* packetRGBChannel,
 /**
  * create_transposed_led_output_optimized — converts the raw LED buffer into the
  * bit-parallel waveform buffer consumed by the PARLIO DMA engine.
+ * Uses driver->mapPixel (Phase 9) for unified brightness/gamma LUT + channel reorder.
  */
 static void create_transposed_led_output_optimized(
         I2SClocklessLedDriver* driver,
@@ -205,13 +175,14 @@ static void create_transposed_led_output_optimized(
         uint16_t*       output_buffer,
         const uint16_t* pixels_per_pin,
         const uint32_t  num_active_pins,
-        const uint8_t   COMPONENTS_PER_PIXEL,
-        const uint8_t   offsetR, const uint8_t offsetG, const uint8_t offsetB,
-        const uint8_t   offsetW, const uint8_t offsetW2) {
+        const uint8_t   COMPONENTS_PER_PIXEL) {
 
+    // cached waveforms (0x100 = 256 possible 8-bit values)
     static uint32_t waveform_cache[256];
+    // initialization flag (computed once on first call)
     static bool     waveform_cache_initialized = false;
 
+    // 16 WS2812 bit patterns (4 bits in → 16-bit waveform out)
     static const uint16_t bitpatterns[16] = {
         0b1000100010001000, 0b1000100010001110,
         0b1000100011101000, 0b1000100011101110,
@@ -232,12 +203,16 @@ static void create_transposed_led_output_optimized(
         waveform_cache_initialized = true;
     }
 
+    // max LEDs per output strip
     const uint16_t max_leds = driver->numLedPerStrip;
 
+    // 32 time slices per component per LED
     const uint32_t WAVEFORM_WORDS_PER_PIXEL = COMPONENTS_PER_PIXEL * 32u;
+    // total 32-bit words to fill
     const uint32_t total_output_words = max_leds * WAVEFORM_WORDS_PER_PIXEL;
     if (total_output_words == 0) return;
 
+    // bits per parallel word (1/2/4/8/16 for outputs)
     uint8_t bit_width;
     if      (num_active_pins <= 1)  bit_width = 1;
     else if (num_active_pins <= 2)  bit_width = 2;
@@ -251,7 +226,7 @@ static void create_transposed_led_output_optimized(
     uint8_t* out_base_ptr = reinterpret_cast<uint8_t*>(output_buffer);
 
     for (uint32_t pixel_in_pin = 0; pixel_in_pin < max_leds; ++pixel_in_pin) {
-
+        // temporary buffer to hold LUT-mapped colour for all active pins at this LED index
         uint8_t mappedBuffer[COMPONENTS_PER_PIXEL * SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH];
 
         for (uint32_t pin = 0; pin < num_active_pins; ++pin) {
@@ -259,10 +234,9 @@ static void create_transposed_led_output_optimized(
             const uint32_t component_idx = pixel_idx * COMPONENTS_PER_PIXEL;
 
             if (pixel_in_pin < pixels_per_pin[pin]) {
-                rgbwBufferMapping(&mappedBuffer[pin * COMPONENTS_PER_PIXEL],
-                                  &input_buffer[component_idx],
-                                  offsetR, offsetG, offsetB, offsetW, offsetW2,
-                                  driver);
+                // Phase 9: unified LUT+white extraction+channel-reorder method (shared across all platforms)
+                driver->rgbwBufferMapping(&input_buffer[component_idx],
+                                          &mappedBuffer[pin * COMPONENTS_PER_PIXEL]);
             } else {
                 memset(&mappedBuffer[pin * COMPONENTS_PER_PIXEL], 0, COMPONENTS_PER_PIXEL);
             }
@@ -295,11 +269,12 @@ static void create_transposed_led_output_optimized(
 // PARLIO transmit config — immutable after first use.
 // ---------------------------------------------------------------------------
 
+// PARLIO transmit settings (idle value, non-blocking queue, no loop).
 static const parlio_transmit_config_t transmit_config = {
-    .idle_value = 0x00,
+    .idle_value = 0x00,  // output idle level (0)
     .flags = {
-        .queue_nonblocking  = 1,
-        .loop_transmission  = 0,
+        .queue_nonblocking  = 1,  // don't block on queue full
+        .loop_transmission  = 0,  // single-shot DMA (not looped)
     }
 };
 
@@ -307,11 +282,15 @@ static const parlio_transmit_config_t transmit_config = {
 // I2SClocklessLedDriver P4 method bodies
 // ---------------------------------------------------------------------------
 
+// Transp all pixels from leds[] to p4BufferActive using create_transposed_led_output_optimized (P4 platform).
 inline bool __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
+    // number of active parallel outputs (capped to hardware max)
     uint8_t outputs = numStrips;
     if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH)
         outputs = SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH;
+    // max LED count per output strip
     const uint16_t max_leds  = numLedPerStrip;
+    // colour channels (RGB or RGBW)
     const uint8_t  components = nbComponents;
 
     const uint32_t required_bytes =
@@ -327,13 +306,15 @@ inline bool __attribute__((hot)) I2SClocklessLedDriver::loadAndTranspose() {
 
     create_transposed_led_output_optimized(
         this, leds, p4BufferActive,
-        stripSize, outputs, components,
-        pR, pG, pB, pW, pW2);
+        stripSize, outputs, components);
     return true;
 }
 
+// Start PARLIO TX transfer (split into chunks if needed for large frames).
 inline void I2SClocklessLedDriver::hwStart() {
+    // colour channels (RGB or RGBW)
     const uint8_t  components = nbComponents;
+    // LEDs per output
     const uint16_t max_leds   = numLedPerStrip;
 
     const uint32_t bits_per_pixel   = components * 32u * p4Config.data_width;
@@ -368,7 +349,9 @@ inline void I2SClocklessLedDriver::hwStart() {
     }
 }
 
+// Wait for PARLIO TX to complete all transfers (with optional delay padding).
 inline void I2SClocklessLedDriver::hwStop() {
+    // measure transfer time to ensure minimum frame timing
     int64_t before = esp_timer_get_time();
     ESP_ERROR_CHECK(parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY));
     int64_t after = esp_timer_get_time();

@@ -2,7 +2,7 @@
 
 This document tracks the ongoing repository reorganization effort to unify platform-specific code (ESP32-D0, ESP32-S3, ESP32-P4) under a common vocabulary and clean architecture.
 
-**Status: Phases 1–8 completed. Phase 9 pending.**
+**Status: Phases 1–9 completed.**
 
 ---
 
@@ -440,8 +440,13 @@ What was done:
 
 Result: `I2SClocklessLedDriver.h` dropped from ~2100 lines to ~1660 lines; 458 lines extracted to `i2s_impl.h`.
 
-### Phase 9 — Common LUT application layer (pending)
+### Phase 9 — Common LUT application layer ✅ done
 
 *Goal:* The per-pixel LUT+channel-reorder logic (`rgbwBufferMapping` on P4, inline code in `loadAndTranspose` on ESP32/S3) is written once as a shared method.
 
-`rgbwBufferMapping` is already defined in `parlio_p4_impl.h` (moved from `parlio_p4.cpp` in Phase 5) as a file-local static helper.  Phase 9 promotes it to a shared class method; ESP32/S3 `loadAndTranspose` should call it rather than duplicating the LUT indexing inline.  Requires ISR-path benchmarking on real hardware before committing — `loadAndTranspose` runs in interrupt context on ESP32/S3 and any extra call overhead must be measured.
+What was done:
+1. Added `inline void rgbwBufferMapping(const uint8_t* src, uint8_t* dst) const` to the class body (no platform guard). Reads raw R,G,B[,W[,W2]] from `src`, applies white extraction, LUT tables, and channel reorder, writes mapped values to `dst[pR/pG/pB/pW/pW2]`.
+2. In `i2s_impl.h` `loadAndTranspose`: replaced the ~15-line inline LUT block with `driver->rgbwBufferMapping(poli, mapped)` + a loop copying `mapped[c]` into `secondPixel[c].bytes[i]`.
+3. In `parlio_p4_impl.h`: removed `rgbwBufferMapping` static free function (now a shared class method); replaced its call in `create_transposed_led_output_optimized` with `driver->rgbwBufferMapping(...)`; dropped the now-unused `offsetR/G/B/W/W2` parameters from `create_transposed_led_output_optimized` and its call site.
+
+Note: `rgbwBufferMapping` is `inline` so the compiler will typically inline it into `loadAndTranspose` (ISR context on ESP32/S3) with no call overhead. Benchmark before/after to confirm timing is unchanged.

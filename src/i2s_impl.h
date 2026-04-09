@@ -13,7 +13,9 @@
 
 #if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32
 
+// Allocate and initialize one DMA descriptor + data buffer (platform-specific fields).
 inline I2SClocklessLedDriver::I2SClocklessLedDriverDMABuffer* I2SClocklessLedDriver::allocateDMABuffer(int bytes) {
+  // DMA descriptor structure (holds S3 dw0 or ESP32 descriptor fields)
   I2SClocklessLedDriverDMABuffer* b = (I2SClocklessLedDriverDMABuffer*)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
   if (!b) {
     ESP_LOGE(TAG, "Failed to allocate DMA buffer descriptor!");
@@ -49,6 +51,7 @@ inline I2SClocklessLedDriver::I2SClocklessLedDriverDMABuffer* I2SClocklessLedDri
   return b;
 }
 
+// Fill buffer with default "1" bits for idle/sync phases (platform-specific bit layout).
 inline void I2SClocklessLedDriver::putdefaultones(uint16_t* buffer) {
 /*order to push the data to the pins
  0:D7
@@ -89,6 +92,7 @@ inline void I2SClocklessLedDriver::putdefaultones(uint16_t* buffer) {
 #endif
 }
 
+// Start hardware DMA transfer with resolved start-of-chain buffer (ping-pong or full-buffer mode).
 inline void I2SClocklessLedDriver::hwStart() {
   // Resolve the start-of-chain DMA buffer.  In FULL_DMA_BUFFER mode the entire
   // frame is pre-transposed into dmaBuffersTransposed (transpose == false);
@@ -143,6 +147,7 @@ inline void I2SClocklessLedDriver::hwStart() {
   isDisplaying = true;
 }
 
+// Reset I2S/GDMA hardware (platform-specific register sequence).
 inline void IRAM_ATTR I2SClocklessLedDriver::i2sReset() {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
   gdma_reset(dmaChan);
@@ -157,6 +162,7 @@ inline void IRAM_ATTR I2SClocklessLedDriver::i2sReset() {
 #endif
 }
 
+// Stop hardware DMA and release waiting tasks (called from ISR context).
 static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 
@@ -179,9 +185,9 @@ static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
 #endif
   cont->i2sReset();
 
-  cont->isDisplaying = false;
+  cont->isDisplaying = false;  // transfer complete
 
-  portBASE_TYPE hpTaskAwoken = 0;
+  portBASE_TYPE hpTaskAwoken = 0;  // track if ISR wakeup is needed
   if (cont->wasWaitingtofinish == true) {
     cont->wasWaitingtofinish = false;
     xSemaphoreGiveFromISR(cont->waitDisp, &hpTaskAwoken);
@@ -194,6 +200,7 @@ static void IRAM_ATTR hwStop(I2SClocklessLedDriver* cont) {
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
 
+// GDMA EOF interrupt callback (S3 variant): refill ping-pong buffer or stop on frame end.
 static IRAM_ATTR bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event_data_t* eventData, void* userData) {
   // This DMA callback seems to trigger a moment before the last data has
   // issued (buffering between DMA & LCD peripheral?), so pause a moment
@@ -245,6 +252,7 @@ static IRAM_ATTR bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event
   return true;
 }
 #elif CONFIG_IDF_TARGET_ESP32
+// I2S EOF interrupt callback (ESP32 variant): refill ping-pong buffer or stop on frame end.
 static void IRAM_ATTR interruptHandler(void* arg) {
   #ifdef DO_NOT_USE_INTERUPT
   REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
@@ -296,8 +304,9 @@ static void IRAM_ATTR interruptHandler(void* arg) {
 }
 #endif
 
+// Transpose one 8-bit colour channel from strip-parallel format to time-slice parallel format (platform-specific bit layout).
 static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint8_t numStrips) {
-  uint32_t x, y, x1, y1, t;
+  uint32_t x, y, x1, y1, t;  // working registers for bit manipulation
 
   y = *reinterpret_cast<const unsigned int*>(a);
 
@@ -372,14 +381,15 @@ static void IRAM_ATTR transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint
 #endif
 }
 
+// Load one LED row from leds[] buffer, apply LUT+reorder, and transpose to DMA buffer (ping-pong or full mode).
 static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_t *ledt, uint16_t *sizes, uint8_t num_stripst, uint16_t *buffer, int ledtodisp, uint8_t *mapg, uint8_t *mapr, uint8_t
                                                                        // *mapb, uint8_t *mapw, int nbcomponents, int pr, int pg, int pb)
 {
   // cont->leds, cont->stripSize, cont->numStrips, (uint16_t *)cont->transferBuffers[cont->dmaBufferActive]->buffer, cont->ledToDisplay, cont->redMap, cont->greenMap, cont->blueMap,
   // cont->whiteMap, cont->nbComponents, cont->pR, cont->pG, cont->pB);
-  int nbcomponents = driver->nbComponents;
-  Lines secondPixel[nbcomponents];
-  uint16_t* buffer = nullptr;
+  int nbcomponents = driver->nbComponents;  // number of colour channels (RGB or RGBW)
+  Lines secondPixel[nbcomponents];  // temporary buffer for colour components (VLA)
+  uint16_t* buffer = nullptr;  // points to active DMA buffer (resolved below)
   if (driver->transpose)
     buffer = (uint16_t*)driver->transferBuffers[driver->dmaBufferActive]->buffer;
   else
@@ -411,27 +421,11 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
       poli = driver->leds + pgm_read_word_near(driver->hmap + driver->hmapOff);
   #endif
 #endif
-      uint8_t red = *(poli + 0);
-      uint8_t green = *(poli + 1);
-      uint8_t blue = *(poli + 2);
-      // 🌙 extract White from RGB
-      if (driver->pW != UINT8_MAX) {
-        uint8_t white = *(poli + 3);
-        // if white is filled, use that and do not extract rgbw
-        if (driver->extractWhiteFromRGB && !white) {
-          white = MIN(MIN(red, green), blue);
-          red -= white;
-          green -= white;
-          blue -= white;
-        }
-        secondPixel[driver->pW].bytes[i] = driver->whiteMap[white];
-        if (driver->pW2 != UINT8_MAX) {
-          secondPixel[driver->pW2].bytes[i] = driver->white2Map[*(poli + 4)];
-        }
-      }
-      secondPixel[driver->pR].bytes[i] = driver->redMap[red];
-      secondPixel[driver->pG].bytes[i] = driver->greenMap[green];
-      secondPixel[driver->pB].bytes[i] = driver->blueMap[blue];
+      // Apply LUT tables + white extraction + channel reorder (Phase 9: unified method, called on all platforms)
+      uint8_t mapped[5] = {};  // temporary buffer holding mapped pixel in wire order (pR/pG/pB/pW/pW2)
+      driver->rgbwBufferMapping(poli, mapped);  // brightness/gamma LUT + white extraction + channel reorder
+      // distribute mapped components into their respective colour channels
+      for (int c = 0; c < nbcomponents; c++) secondPixel[c].bytes[i] = mapped[c];
 #ifdef __HARDWARE_MAP
       driver->hmapOff++;
 #endif

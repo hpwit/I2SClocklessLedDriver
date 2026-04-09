@@ -575,6 +575,29 @@ class I2SClocklessLedDriver {
     setBrightness(brightness);
   }
 
+  /** Apply brightness/gamma LUTs, white extraction, and channel reorder for one pixel.
+   *  src[0..nbComponents-1] — raw input in (R,G,B[,W[,W2]]) storage order.
+   *  dst[0..nbComponents-1] — mapped output in wire order (pR/pG/pB/pW/pW2 indices). */
+  inline void rgbwBufferMapping(const uint8_t* src, uint8_t* dst) const {
+    uint8_t red   = src[0];    // raw R from input buffer
+    uint8_t green = src[1];    // raw G from input buffer
+    uint8_t blue  = src[2];    // raw B from input buffer
+    if (pW != UINT8_MAX) {
+      uint8_t white = src[3];  // raw W (or extract from RGB)
+      if (extractWhiteFromRGB && !white) {
+        white  = MIN(MIN(red, green), blue);  // extract white component
+        red   -= white;    // remove white from RGB channels
+        green -= white;
+        blue  -= white;
+      }
+      dst[pW] = whiteMap[white];         // apply white LUT to wire order
+      if (pW2 != UINT8_MAX) dst[pW2] = white2Map[src[4]];  // apply white2 LUT if present
+    }
+    dst[pR] = redMap[red];      // apply red LUT to wire order position
+    dst[pG] = greenMap[green];  // apply green LUT to wire order position
+    dst[pB] = blueMap[blue];    // apply blue LUT to wire order position
+  }
+
   void hwInit() {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     periph_module_enable(PERIPH_LCD_CAM_MODULE);
@@ -919,7 +942,7 @@ class I2SClocklessLedDriver {
       isWaiting = true;
       if (sem == NULL) sem = xSemaphoreCreateBinary();
       if (xSemaphoreTake(sem, pdMS_TO_TICKS(500)) == pdFALSE) {
-        ESP_LOGW("TAG", "sem wait too long");
+        ESP_LOGW(TAG, "sem wait too long");
         xSemaphoreTake(sem, portMAX_DELAY);
       }
     }
@@ -946,7 +969,7 @@ class I2SClocklessLedDriver {
       tmp_leds = newLeds;
       if (waitDisp == NULL) waitDisp = xSemaphoreCreateCounting(10, 0);
       if (xSemaphoreTake(waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
-        ESP_LOGW("TAG", "waitDisp wait too long");
+        ESP_LOGW(TAG, "waitDisp wait too long");
         xSemaphoreTake(waitDisp, portMAX_DELAY);
       }
     }
@@ -968,7 +991,7 @@ class I2SClocklessLedDriver {
       wasWaitingtofinish = true;
       if (waitDisp == NULL) waitDisp = xSemaphoreCreateCounting(10, 0);
       if (xSemaphoreTake(waitDisp, pdMS_TO_TICKS(500)) == pdFALSE) {
-        ESP_LOGW("TAG", "waitDisp wait too long");
+        ESP_LOGW(TAG, "waitDisp wait too long");
         xSemaphoreTake(waitDisp, portMAX_DELAY);
       }
     }
@@ -1162,7 +1185,7 @@ class I2SClocklessLedDriver {
   void waitSync() {
     semSync = xSemaphoreCreateBinary();
     if (xSemaphoreTake(semSync, pdMS_TO_TICKS(500)) == pdFALSE) {
-      ESP_LOGW("TAG", "semSync wait too long");
+      ESP_LOGW(TAG, "semSync wait too long");
       xSemaphoreTake(semSync, portMAX_DELAY);
     }
   }
@@ -1340,7 +1363,7 @@ class I2SClocklessLedDriver {
       isWaiting = true;
       if (sem == NULL) sem = xSemaphoreCreateBinary();
       if (xSemaphoreTake(sem, pdMS_TO_TICKS(500)) == pdFALSE) {
-        ESP_LOGW("TAG", "sem wait too long");
+        ESP_LOGW(TAG, "sem wait too long");
         xSemaphoreTake(sem, portMAX_DELAY);
       }
     } else {
