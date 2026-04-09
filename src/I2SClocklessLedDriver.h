@@ -846,7 +846,7 @@ class I2SClocklessLedDriver {
     ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
     initErrorOccurred = true;
     return;
-  #endif
+  #else
 
     {
       uint8_t outputs = numStrips;
@@ -884,16 +884,16 @@ class I2SClocklessLedDriver {
         p4Config.data_gpio_nums[i] = (i < outputs) ? gpio_num_t(pins[i]) : gpio_num_t(-1);
       }
 
-  #ifdef PARLIO_AUTO_OVERCLOCK
+    #ifdef PARLIO_AUTO_OVERCLOCK
       if (max_leds <= 256)
         p4Config.output_clk_freq_hz = 1200000u * 4u;
       else if (max_leds <= 512)
         p4Config.output_clk_freq_hz = 1100000u * 4u;
       else
         p4Config.output_clk_freq_hz = 800000u * 4u;
-  #else
+    #else
       p4Config.output_clk_freq_hz = 800000u * 4u;
-  #endif
+    #endif
       p4Config.valid_start_delay = 0;
       p4Config.valid_stop_delay = 0;
       p4Config.dma_burst_size = 64;
@@ -929,6 +929,7 @@ class I2SClocklessLedDriver {
 
       ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)", (unsigned)outputs, (unsigned)max_leds);
     }
+  #endif
     return;  // P4 done; skip S3/ESP32 DMA buffer setup below
 #endif
 
@@ -1465,6 +1466,7 @@ class I2SClocklessLedDriver {
 #ifdef USE_PIXELSLIB
   void initled(Pixels pix, uint8_t* pinsq) { initled((uint8_t*)pix.getPixels(), pinsq, pix.getLengths(), pix.getNumStrip()); }
 #endif
+  bool s3patch_inclhwInit = true;
   /**
    * CANONICAL initled — the primary entry point.  All other initled() overloads
    * are convenience wrappers that translate their arguments and call this one.
@@ -1631,8 +1633,6 @@ class I2SClocklessLedDriver {
       createhardwareMap();
     }
 #endif
-    setBrightness(255);
-    if (initErrorOccurred) return;  // LUT allocation failed — stop early
     /*
     // dmaBufferCount = 2;
     this->leds = leds;
@@ -1646,26 +1646,31 @@ class I2SClocklessLedDriver {
     linewidth = numLedPerStrip;
     this->numStrips = numStrips;
     // this->dmaBufferCount = dmaBufferCount;
-
-    // IDF5.5: 🌙 initled: call setGlobalNumStrips and setShowDelay
-    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 5, 0)
-        setGlobalNumStrips();
-        setShowDelay();
-    #endif
     */
 
     setPins(pinsq);
-    hwInit();
+
+    if (s3patch_inclhwInit) {
+      hwInit();
+      if (initErrorOccurred) {
+        initSuccess = false;
+        return;
+      }
+    }
+
+    setBrightness(brightness);
     if (initErrorOccurred) {
       initSuccess = false;
       return;
-    }
+    };  // LUT allocation failed — stop early
+
     initTransferBuffers();
+
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   }
 
   // update driver: recreate dma buffers if numStrips or numLedPerStrip or dmaBuffer size changed
-  void updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX);
+  void updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX, bool extractWhiteFromRGB = false);
   // delete driver when the driver is stopped
   void deleteDriver();
 

@@ -30,7 +30,7 @@ clock_speed clock800Khz = {6, 4, 1};
  *   P4       — isDisplaying is always false (hwStop is synchronous), so the wait
  *              block is a no-op; execution falls straight through to deleteDriver().
  */
-void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2) {
+void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2, bool extractWhiteFromRGB) {
   if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS || dmaBuffer == 0) {
     ESP_LOGE(TAG, "updateDriver: invalid args numStrips=%u dmaBuffer=%u sizes=%p pinsq=%p", numStrips, dmaBuffer, (void*)sizes, (void*)pinsq);
     return;  // leave driver in previous consistent state
@@ -59,14 +59,54 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 
   deleteDriver();  // tears down HW (GDMA/ISR on S3/ESP32, PARLIO on P4) and frees buffers
 
+  #if true // true works well, false gives on esp32-S3: [  5603][W][I2SClocklessLedDriver.h:1434] showPixelsImpl(): [🐸] sem wait too long and Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:E (20254) task_wdt:  - AppDrivers (CPU 1)E (20254) task_wdt:  - AppEffects (CPU 0) - very strange as both code looks identicalF
+  initErrorOccurred = false;
+  initSuccess = false;
+
+  this->numStrips = numStrips;
+  totalLeds = 0;
+  firstIndexPerOutput[0] = 0;
+  for (int i = 0; i < numStrips; i++) {
+    stripSize[i] = sizes[i];
+    totalLeds += sizes[i];
+    if (i > 0) firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + sizes[i - 1];
+  }
+  this->numLedPerStrip = newNumLedPerStrip;
+  offsetDisplay.offsetx = 0;
+  offsetDisplay.offsety = 0;
+  offsetDisplay.panelWidth = newNumLedPerStrip;
+  offsetDisplay.panelHeight = 9999;
+  defaultOffsetDisplay = offsetDisplay;
+  linewidth = newNumLedPerStrip;
+  nbDmaBuffer = dmaBuffer;
+  this->channelsPerLight = channelsPerLight;
+  this->pR = pR;
+  this->pG = pG;
+  this->pB = pB;
+  this->pW = pW;
+  this->pW2 = pW2;
+
+  setShowDelay();
+  setPins(pinsq);
+  setBrightness(brightness);
+
+  initTransferBuffers();
+  initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
+  ESP_LOGD(TAG, "updateDriver %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
+#else
   nbDmaBuffer = dmaBuffer;  // set DMA buffer count before reinit
 
+  s3patch_inclhwInit = false;
+
   // Reinitialize via initled() — handles geometry setup and calls initLedImpl()
-  initled(this->leds, pinsq, sizes, numStrips, channelsPerLight, pR, pG, pB, pW, pW2);
+  initled(this->leds, pinsq, sizes, numStrips, channelsPerLight, pR, pG, pB, pW, pW2, extractWhiteFromRGB);
+
+  s3patch_inclhwInit = true;
 
   // Restore brightness after reinitialization
-  setBrightness(brightness);
+  // setBrightness(brightness);
   ESP_LOGD(TAG, "updateDriver %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
+  #endif
 }
 
 /** deleteDriver — tears down all hardware resources and frees all buffers.
@@ -90,9 +130,9 @@ void I2SClocklessLedDriver::deleteDriver() {
     gdma_del_channel(dmaChan);
     dmaChan = nullptr;
   }
-  // Reset and disable the LCD_CAM peripheral completely
-  periph_module_reset(PERIPH_LCD_CAM_MODULE);
-  periph_module_disable(PERIPH_LCD_CAM_MODULE);
+  // // Reset and disable the LCD_CAM peripheral completely - update: this caused watchdogs, as recreation seems to fail ...
+  // periph_module_reset(PERIPH_LCD_CAM_MODULE);
+  // periph_module_disable(PERIPH_LCD_CAM_MODULE);
   #endif
   if (transferBuffers) {
     for (int i = 0; i < nbDmaBuffer + 2; i++) {
