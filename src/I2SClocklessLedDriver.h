@@ -238,7 +238,7 @@ static bool interruptHandler(gdma_channel_handle_t dmaChan, gdma_event_data_t* e
 static void interruptHandler(void* arg);
 #endif
 
-static void transpose16x1Noinline2(unsigned char* a, uint16_t* b, uint8_t numStrips);
+static void transposeColorChannel(unsigned char* a, uint16_t* b, uint8_t numStrips);
 
 /*
 #ifdef ENABLE_HARDWARE_SCROLL
@@ -348,7 +348,7 @@ class I2SClocklessLedDriver {
   volatile uint16_t numLedPerStrip = 0;
   volatile uint32_t totalLeds = 0;
   // int clock_pin;
-  uint8_t pR = 0, pG = 1, pB = 2, pW = UINT8_MAX, pW2 = UINT8_MAX;
+  uint8_t offsetRed = 0, offsetGreen = 1, offsetBlue = 2, offsetWhite = UINT8_MAX, offsetWhite2 = UINT8_MAX;
   int i2sBasePinIndex = 0;
   uint8_t channelsPerLight = 3;  // channels per LED
   uint16_t stripSize[MAX_PINS] = {};
@@ -507,7 +507,7 @@ class I2SClocklessLedDriver {
       }
     }
 
-    if (pW != UINT8_MAX) {
+    if (offsetWhite != UINT8_MAX) {
       if (!whiteMap) {
         whiteMap = (uint8_t*)malloc(256);
         if (!whiteMap) {
@@ -522,7 +522,7 @@ class I2SClocklessLedDriver {
       whiteMap = nullptr;
     }
 
-    if (pW2 != UINT8_MAX) {
+    if (offsetWhite2 != UINT8_MAX) {
       if (!white2Map) {
         white2Map = (uint8_t*)malloc(256);
         if (!white2Map) {
@@ -577,12 +577,12 @@ class I2SClocklessLedDriver {
 
   /** Apply brightness/gamma LUTs, white extraction, and channel reorder for one pixel.
    *  src[0..channelsPerLight-1] — raw input in (R,G,B[,W[,W2]]) storage order.
-   *  dst[0..channelsPerLight-1] — mapped output in wire order (pR/pG/pB/pW/pW2 indices). */
+   *  dst[0..channelsPerLight-1] — mapped output in wire order (offsetRed/offsetGreen/offsetBlue/offsetWhite/offsetWhite2 indices). */
   inline void rgbwBufferMapping(const uint8_t* src, uint8_t* dst) const {
     uint8_t red = src[0];    // raw R from input buffer
     uint8_t green = src[1];  // raw G from input buffer
     uint8_t blue = src[2];   // raw B from input buffer
-    if (pW != UINT8_MAX) {
+    if (offsetWhite != UINT8_MAX) {
       uint8_t white = src[3];  // raw W (or extract from RGB)
       if (extractWhiteFromRGB && !white) {
         white = MIN(MIN(red, green), blue);  // extract white component
@@ -590,12 +590,12 @@ class I2SClocklessLedDriver {
         green -= white;
         blue -= white;
       }
-      dst[pW] = whiteMap[white];                           // apply white LUT to wire order
-      if (pW2 != UINT8_MAX) dst[pW2] = white2Map[src[4]];  // apply white2 LUT if present
+      dst[offsetWhite] = whiteMap[white];                           // apply white LUT to wire order
+      if (offsetWhite2 != UINT8_MAX) dst[offsetWhite2] = white2Map[src[4]];  // apply white2 LUT if present
     }
-    dst[pR] = redMap[red];      // apply red LUT to wire order position
-    dst[pG] = greenMap[green];  // apply green LUT to wire order position
-    dst[pB] = blueMap[blue];    // apply blue LUT to wire order position
+    dst[offsetRed] = redMap[red];      // apply red LUT to wire order position
+    dst[offsetGreen] = greenMap[green];  // apply green LUT to wire order position
+    dst[offsetBlue] = blueMap[blue];    // apply blue LUT to wire order position
   }
 
   void hwInit() {
@@ -899,7 +899,7 @@ class I2SClocklessLedDriver {
             uint8_t green = *(poli + 1);
             uint8_t blue = *(poli + 2);
             // 🌙 extract White from RGB
-            if (driver->pW != UINT8_MAX) {
+            if (driver->offsetWhite != UINT8_MAX) {
               uint8_t white = *(poli + 3);
               // if white is filled, use that and do not extract rgbw
               if (driver->extractWhiteFromRGB && !white) {
@@ -908,23 +908,23 @@ class I2SClocklessLedDriver {
                 green -= white;
                 blue -= white;
               }
-              secondPixel[driver->pW].bytes[i] = driver->whiteMap[white];
-              if (driver->pW2 != UINT8_MAX) {
-                secondPixel[driver->pW2].bytes[i] = driver->white2Map[*(poli + 4)];
+              secondPixel[driver->offsetWhite].bytes[i] = driver->whiteMap[white];
+              if (driver->offsetWhite2 != UINT8_MAX) {
+                secondPixel[driver->offsetWhite2].bytes[i] = driver->white2Map[*(poli + 4)];
               }
             }
-            secondPixel[pR].bytes[i] = redMap[red];
-            secondPixel[pG].bytes[i] = greenMap[green];
-            secondPixel[pB].bytes[i] = blueMap[blue];
+            secondPixel[offsetRed].bytes[i] = redMap[red];
+            secondPixel[offsetGreen].bytes[i] = greenMap[green];
+            secondPixel[offsetBlue].bytes[i] = blueMap[blue];
             //#endif
             poli += numLedPerStrip * channelsPerLight;
         }
         ledToDisplay++;
-        transpose16x1Noinline2(secondPixel[0].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer);
-        transpose16x1Noinline2(secondPixel[1].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer + 3 * 8);
-        transpose16x1Noinline2(secondPixel[2].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer + 2 * 3 * 8);
-        if (pW != UINT8_MAX)
-            transpose16x1Noinline2(secondPixel[3].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer + 3 * 3 * 8);
+        transposeColorChannel(secondPixel[0].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer);
+        transposeColorChannel(secondPixel[1].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer + 3 * 8);
+        transposeColorChannel(secondPixel[2].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer + 2 * 3 * 8);
+        if (offsetWhite != UINT8_MAX)
+            transposeColorChannel(secondPixel[3].bytes, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer + 3 * 3 * 8);
     }*/
     for (int j = 0; j < numLedPerStrip; j++) {
       ledToDisplay = j;
@@ -933,7 +933,7 @@ class I2SClocklessLedDriver {
       /*
       #ifdef ENABLE_HARDWARE_SCROLL
       loadAndTranspose(leds, numLedPerStrip, numStrips, offsetDisplay, (uint16_t *)dmaBuffersTransposed[j + 1]->buffer, j, redMap, greenMap, blueMap, whiteMap, channelsPerLight,
-      pR, pG, pB); #else loadAndTranspose(leds, stripSize, numStrips, (uint16_t *)dmaBuffersTransposed[j+1]->buffer, j, redMap, greenMap, blueMap, whiteMap, channelsPerLight, pR, pG, pB);
+      offsetRed, offsetGreen, offsetBlue); #else loadAndTranspose(leds, stripSize, numStrips, (uint16_t *)dmaBuffersTransposed[j+1]->buffer, j, redMap, greenMap, blueMap, whiteMap, channelsPerLight, offsetRed, offsetGreen, offsetBlue);
       #endif
       */
     }
@@ -945,7 +945,7 @@ class I2SClocklessLedDriver {
       return;
     }
     uint8_t white = 0;
-    if (pW != UINT8_MAX) {
+    if (offsetWhite != UINT8_MAX) {
       white = MIN(red, green);
       white = MIN(W, blue);
       red = red - white;
@@ -962,9 +962,9 @@ class I2SClocklessLedDriver {
     }
     uint16_t mask = ~(1 << stripNumber);
     uint8_t colors[3];
-    colors[pR] = redMap[red];
-    colors[pG] = greenMap[green];
-    colors[pB] = blueMap[blue];
+    colors[offsetRed] = redMap[red];
+    colors[offsetGreen] = greenMap[green];
+    colors[offsetBlue] = blueMap[blue];
     uint16_t* B = (uint16_t*)dmaBuffersTransposed[posOnStrip + 1]->buffer;
     // printf("channelsPerLight:%d\n",channelsPerLight);
     uint8_t y = colors[0];
@@ -998,7 +998,7 @@ class I2SClocklessLedDriver {
     *((uint16_t*)(B + 17)) = (*((uint16_t*)(B + 17)) & mask) | ((uint16_t)((y & 4) >> 2) << stripNumber);
     *((uint16_t*)(B + 18)) = (*((uint16_t*)(B + 18)) & mask) | ((uint16_t)((y & 2) >> 1) << stripNumber);
     *((uint16_t*)(B + 23)) = (*((uint16_t*)(B + 23)) & mask) | ((uint16_t)(y & 1) << stripNumber);
-    if (pW != UINT8_MAX) {
+    if (offsetWhite != UINT8_MAX) {
       B += 3 * 8;
       y = whiteMap[white];
       *((uint16_t*)(B)) = (*((uint16_t*)(B)) & mask) | ((uint16_t)((y & 128) >> 7) << stripNumber);
@@ -1010,7 +1010,7 @@ class I2SClocklessLedDriver {
       *((uint16_t*)(B + 18)) = (*((uint16_t*)(B + 18)) & mask) | ((uint16_t)((y & 2) >> 1) << stripNumber);
       *((uint16_t*)(B + 23)) = (*((uint16_t*)(B + 23)) & mask) | ((uint16_t)(y & 1) << stripNumber);
     }
-    if (pW2 != UINT8_MAX) {
+    if (offsetWhite2 != UINT8_MAX) {
       B += 3 * 8;
       y = white2Map[white2];
       *((uint16_t*)(B)) = (*((uint16_t*)(B)) & mask) | ((uint16_t)((y & 128) >> 7) << stripNumber);
@@ -1049,7 +1049,7 @@ class I2SClocklessLedDriver {
   /** Writes one RGB pixel directly into the pre-transposed DMA buffer; derives white channel for RGBW strips. */
   void setPixelinBuffer(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
     uint8_t white = 0;
-    if (pW != UINT8_MAX) {
+    if (offsetWhite != UINT8_MAX) {
       white = MIN(red, green);
       white = MIN(W, blue);
       red = red - white;
@@ -1086,7 +1086,7 @@ class I2SClocklessLedDriver {
 
   /** Sets one RGB pixel in the leds[] buffer; auto-derives white channel for RGBW strips. */
   void setPixel(uint32_t pos, uint8_t red, uint8_t green, uint8_t blue) {
-    if (pW == UINT8_MAX) {  // no white channel
+    if (offsetWhite == UINT8_MAX) {  // no white channel
       uint8_t* offset = leds + (pos << 1) + pos;
       *(offset) = red;
       *(++offset) = green;
@@ -1350,14 +1350,14 @@ class I2SClocklessLedDriver {
    * @param sizes             LED count per strip (array length: numStrips).
    * @param numStrips         Number of parallel strips (max MAX_PINS).
    * @param channelsPerLight  Bytes per pixel: 3 = RGB, 4 = RGBW, 5 = RGBCCT.
-   * @param pR                Wire-order byte offset of the Red channel.
-   * @param pG                Wire-order byte offset of the Green channel.
-   * @param pB                Wire-order byte offset of the Blue channel.
-   * @param pW                Wire-order byte offset of the White channel (UINT8_MAX = absent).
-   * @param pW2               Wire-order byte offset of the warm White channel (UINT8_MAX = absent).
+   * @param offsetRed                Wire-order byte offset of the Red channel.
+   * @param offsetGreen                Wire-order byte offset of the Green channel.
+   * @param offsetBlue                Wire-order byte offset of the Blue channel.
+   * @param offsetWhite                Wire-order byte offset of the White channel (UINT8_MAX = absent).
+   * @param offsetWhite2               Wire-order byte offset of the warm White channel (UINT8_MAX = absent).
    * @param extractWhiteFromRGB  Derive white from the minimum of R/G/B and subtract.
    */
-  void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
+  void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite = UINT8_MAX, uint8_t offsetWhite2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
     if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args numStrips=%u sizes=%p pinsq=%p", numStrips, (void*)sizes, (void*)pinsq);
       return;
@@ -1376,7 +1376,7 @@ class I2SClocklessLedDriver {
     this->saveleds = leds;
 
     // Apply all configuration (geometry, color, pins, timing) from arguments
-    applyConfiguration(pinsq, sizes, numStrips, nbDmaBuffer, channelsPerLight, pR, pG, pB, pW, pW2, extractWhiteFromRGB);
+    applyConfiguration(pinsq, sizes, numStrips, nbDmaBuffer, channelsPerLight, offsetRed, offsetGreen, offsetBlue, offsetWhite, offsetWhite2, extractWhiteFromRGB);
 
     ESP_LOGV(TAG, "xdelay:%d", showDelay);
 
@@ -1399,7 +1399,7 @@ class I2SClocklessLedDriver {
   }
 
   // update driver: recreate dma buffers if numStrips or numLedPerStrip or dmaBuffer size changed
-  void updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW = UINT8_MAX, uint8_t pW2 = UINT8_MAX, bool extractWhiteFromRGB = false);
+  void updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite = UINT8_MAX, uint8_t offsetWhite2 = UINT8_MAX, bool extractWhiteFromRGB = false);
   // delete driver when the driver is stopped
   void deleteDriver();
   // helper: free all allocated buffers (transfer buffers, FULL_DMA buffers, sprites, hmap, semaphores)
@@ -1407,7 +1407,7 @@ class I2SClocklessLedDriver {
   // helper: initialize pins and allocate transfer buffers (called after geometry is set up)
   void initBuffers();
   // helper: apply all configuration (geometry, color, pins, timing) from arguments to member variables
-  void applyConfiguration(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2, bool extractWhiteFromRGB);
+  void applyConfiguration(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite, uint8_t offsetWhite2, bool extractWhiteFromRGB);
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
   typedef dma_descriptor_t I2SClocklessLedDriverDMABuffer;

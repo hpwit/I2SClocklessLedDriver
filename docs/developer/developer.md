@@ -168,7 +168,7 @@ pio device monitor                       # serial monitor
 `gNbDmaBuffer` and `gNumStrips` were file-scope globals. With two `I2SClocklessLedDriver` instances they would share state and cause a data race. They were removed as follows:
 
 - `gNbDmaBuffer` → class member `nbDmaBuffer` (default 6, not `volatile`). `volatile` is unnecessary because `updateDriver()` always waits for DMA to quiesce via semaphore before writing it; the ISR therefore never runs concurrently with a write.
-- `gNumStrips` → parameter on `transpose16x1Noinline2()`; the ISR passes `driver->numStrips` (already `volatile`) directly.
+- `gNumStrips` → parameter on `transposeColorChannel()`; the ISR passes `driver->numStrips` (already `volatile`) directly.
 
 ### `Pixels` copy semantics — intentional asymmetry
 

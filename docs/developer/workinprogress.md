@@ -74,7 +74,7 @@ showPixels()  /  showPixels(WAIT)  /  showPixels(NO_WAIT)  /  showPixels(newleds
              link DMA descriptor ring (dmaBuffersTampon)
              for buffNum 0 … nbDmaBuffer-2:
                loadAndTranspose(driver)        ← pre-fill ping-pong ring
-               │  reads leds[], applies LUTs inline, calls transpose16x1Noinline2(), writes DMA buffer
+               │  reads leds[], applies LUTs inline, calls transposeColorChannel(), writes DMA buffer
              hwStart(dmaBuffersTampon[N])      ← arm and start DMA + I2S TX
              if WAIT: xSemaphoreTake(sem)      ← block until ISR signals completion
 
@@ -137,7 +137,7 @@ src/
   esp32-d0s3_i2s_impl.h        — ESP32-D0 + ESP32-S3: out-of-class method bodies for
   │                               allocateDMABuffer, putdefaultones, hwStart, i2sReset,
   │                               hwStop (static), interruptHandler (static, two variants),
-  │                               transpose16x1Noinline2 (static), loadAndTranspose (static)
+  │                               transposeColorChannel (static), loadAndTranspose (static)
   │                               S3/ESP32 branches kept via existing #ifdef guards  ✅ done (Phase 8)
   esp32-p4_parlio_impl.h       — ESP32-P4:  out-of-class method bodies  ✅ done (Phase 5)
   pixeltypes.h                 — unchanged
@@ -218,7 +218,7 @@ Note: the `if (::hwInit(this)) { return; }` warm-up guard that currently lives i
 
 - **`ColorArrangement` enum and `switch(cArr)` decoder** ✅ (Phase 2): moved to `src/colorarrangement.h`.
 - **P4 PARLIO method bodies** (Phase 5): move from `parlio_p4.cpp` to `esp32-p4_parlio_impl.h`; free-function declarations in `parlio_p4.h` replaced by class method declarations in the class body.
-- **ESP32/S3 I2S method bodies** (Phase 6): `hwInit`, `initTransferBuffers`, `allocateDMABuffer`, `hwStart`, `hwStop`, `loadAndTranspose`, `interruptHandler`, `transpose16x1Noinline2` move to `i2s_esp32_impl.h` / `i2s_esp32s3_impl.h`.  The class retains the declarations.
+- **ESP32/S3 I2S method bodies** (Phase 6): `hwInit`, `initTransferBuffers`, `allocateDMABuffer`, `hwStart`, `hwStop`, `loadAndTranspose`, `interruptHandler`, `transposeColorChannel` move to `i2s_esp32_impl.h` / `i2s_esp32s3_impl.h`.  The class retains the declarations.
 
 ### What stays in `I2SClocklessLedDriver.h`
 
@@ -426,7 +426,7 @@ Both call sites (`showPixelsImpl` normal path and `FULL_DMA_BUFFER` path) now ca
 *Goal:* `I2SClocklessLedDriver.h` shrinks to class declaration + method declarations + thin dispatch block.  The large ESP32/S3 function bodies move to a single `esp32-d0s3_i2s_impl.h` that is `#include`d back after the class definition closes, following the pattern established by Phase 5.
 
 What was done:
-1. Created `src/esp32-d0s3_i2s_impl.h` containing out-of-class definitions for both S3 and ESP32 (existing `#ifdef` guards separate the two): `allocateDMABuffer()`, `putdefaultones()`, `hwStart()`, `i2sReset()` as `inline I2SClocklessLedDriver::` methods; plus `hwStop()`, `interruptHandler()` (two variants), `transpose16x1Noinline2()`, `loadAndTranspose()` as static free functions.
+1. Created `src/esp32-d0s3_i2s_impl.h` containing out-of-class definitions for both S3 and ESP32 (existing `#ifdef` guards separate the two): `allocateDMABuffer()`, `putdefaultones()`, `hwStart()`, `i2sReset()` as `inline I2SClocklessLedDriver::` methods; plus `hwStop()`, `interruptHandler()` (two variants), `transposeColorChannel()`, `loadAndTranspose()` as static free functions.
 2. Replaced inline bodies in the class body with bare declarations inside `#if CONFIG_IDF_TARGET_ESP32S3 || CONFIG_IDF_TARGET_ESP32`.
 3. Replaced the old `#ifndef CONFIG_IDF_TARGET_ESP32P4 … #else #include "esp32-p4_parlio_impl.h" #endif` dispatch with:
    ```cpp
@@ -450,3 +450,64 @@ What was done:
 3. In `esp32-p4_parlio_impl.h`: removed `rgbwBufferMapping` static free function (now a shared class method); replaced its call in `create_transposed_led_output_optimized` with `driver->rgbwBufferMapping(...)`; dropped the now-unused `offsetR/G/B/W/W2` parameters from `create_transposed_led_output_optimized` and its call site.
 
 Note: `rgbwBufferMapping` is `inline` so the compiler will typically inline it into `loadAndTranspose` (ISR context on ESP32/S3) with no call overhead. Benchmark before/after to confirm timing is unchanged.
+
+---
+
+## updateDriver() — design constraints and known issues (post-Phase 9)
+
+### Design invariant: hwInit() is called only from initled()
+
+`hwInit()` performs one-time hardware initialization — on S3 it enables/resets LCD_CAM, creates the GDMA channel, connects it to the LCD trigger, and registers the `interruptHandler` callback.  After `initled()` returns, the GDMA channel and LCD_CAM peripheral remain configured and **must not** be torn down or re-initialized unless `deleteDriver()` is explicitly called.
+
+**`updateDriver()` must NOT call `hwInit()`.**  Attempting to call it from `updateDriver()` causes:
+
+- A fresh GDMA channel allocation while the old channel is still live (resource leak or `gdma_new_ahb_channel` failure)
+- The new channel is disconnected from `GDMA_TRIG_PERIPH_LCD` — ISR callback registration is lost
+- This manifests as `[W] sem wait too long` warnings in `showPixelsImpl()` and watchdog idle crashes
+
+Similarly, calling `deleteDriver()` from `updateDriver()` tears down the GDMA channel and the ISR, which then need `hwInit()` to restore — reintroducing the same crash.
+
+### Design invariant: updateDriver() is minimal
+
+`updateDriver()` should only change what its arguments require.  All hardware init state from `initled()` is preserved across calls.  The current sequence:
+
+```
+validate args
+if isDisplaying: wait for in-flight DMA via waitDisp semaphore (released by ISR in hwStop)
+deleteBuffers()           ← frees transferBuffers[] only; leaves GDMA/LCD_CAM/ISR intact
+applyConfiguration()      ← updates numStrips, stripSize[], numLedPerStrip, firstIndexPerOutput[],
+                             channelsPerLight, offsetRed/Green/Blue/White/White2, pins[], nbDmaBuffer,
+                             calls setShowDelay()
+initBuffers()             ← calls setPins() (re-routes GPIO mux), allocates new transferBuffers[]
+setBrightness(brightness) ← rebuilds brightness/gamma LUTs; handles whiteMap alloc/free if
+                             channelsPerLight or offsetWhite changed
+```
+
+Hardware NOT touched: GDMA channel, LCD_CAM registers, ISR callback registration, semaphores (sem, semSync, waitDisp).
+
+### Data-structure correctness (verified post-Phase 9)
+
+All five reconfiguration scenarios are handled correctly by the current code:
+
+| Scenario | Key mechanism | Status |
+|----------|--------------|--------|
+| Different strip count | `numStrips`/`stripSize[]`/`firstIndexPerOutput[]` updated; stale entries beyond new `numStrips` never accessed | ✓ |
+| Different LEDs per strip | `numLedPerStrip = maxLength(sizes, numStrips)`; `poli` in `loadAndTranspose` advances by `stripSize[i]*channelsPerLight` per strip | ✓ |
+| Different pins | `memset(pins, 0, MAX_PINS)` + copy in `applyConfiguration()`; `esp_rom_gpio_connect_out_signal` re-routes GPIO mux in `setPins()` | ✓ |
+| Different color order | `offsetRed/Green/Blue/White/White2` + `channelsPerLight` updated; `setBrightness()` allocates/frees `whiteMap`/`white2Map` correctly | ✓ |
+| Different DMA buffer count | `deleteBuffers()` called with old `nbDmaBuffer` (before `applyConfiguration()`); `initBuffers()` allocates with new count | ✓ |
+
+### Open bug: random colors after updateDriver() on ESP32-S3
+
+**Symptom**: After calling `updateDriver()` with changed parameters, LEDs display wrong/random colors on subsequent `showPixels()` calls.  Only a device restart restores correct output.
+
+**Status**: Root cause not yet identified.  The data structures are all correctly updated (see table above).  The GDMA/LCD_CAM hardware state is preserved correctly (`hwStart()` calls `gdma_reset` + AFIFO reset before each frame).  `loadAndTranspose()` reads from the correct `leds[]` positions for both old and new geometries.
+
+**Ruled out**:
+- Adding `hwInit()` to `updateDriver()` — causes `sem wait too long` + watchdog crash
+- Adding `deleteDriver()` + `hwInit()` — same crash
+- Stale `stripSize[]`/`firstIndexPerOutput[]` entries beyond `numStrips` — not accessed
+
+**Remaining candidates** (uninvestigated):
+- Some LCD_CAM register modified during a DMA transfer that `hwStart()` does not reset, and that `periph_module_reset()` in `hwInit()` would reset
+- Cache coherency edge case with the PSRAM-allocated `transferBuffers` pointer array vs. DRAM DMA descriptors

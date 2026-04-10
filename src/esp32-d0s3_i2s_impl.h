@@ -16,38 +16,38 @@
 // Allocate and initialize one DMA descriptor + data buffer (platform-specific fields).
 inline I2SClocklessLedDriver::I2SClocklessLedDriverDMABuffer* I2SClocklessLedDriver::allocateDMABuffer(int bytes) {
   // DMA descriptor structure (holds S3 dw0 or ESP32 descriptor fields)
-  I2SClocklessLedDriverDMABuffer* b = (I2SClocklessLedDriverDMABuffer*)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
-  if (!b) {
-    ESP_LOGE(TAG, "Failed to allocate DMA buffer descriptor!");
+  I2SClocklessLedDriverDMABuffer* transferBuffer = (I2SClocklessLedDriverDMABuffer*)heap_caps_malloc(sizeof(I2SClocklessLedDriverDMABuffer), MALLOC_CAP_DMA);
+  if (!transferBuffer) {
+    ESP_LOGE(TAG, "Failed to allocate transferBuffer");
     initErrorOccurred = true;
     return NULL;
   }
 
-  b->buffer = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_DMA);
-  if (!b->buffer) {
+  transferBuffer->buffer = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_DMA);
+  if (!transferBuffer->buffer) {
     ESP_LOGE(TAG, "Failed to allocate DMA buffer!");
     initErrorOccurred = true;
-    free(b);
+    free(transferBuffer);
     return NULL;
   }
-  memset(b->buffer, 0, bytes);
+  memset(transferBuffer->buffer, 0, bytes);
 #ifdef CONFIG_IDF_TARGET_ESP32
-  b->descriptor.length = bytes;
-  b->descriptor.size = bytes;
-  b->descriptor.owner = 1;
-  b->descriptor.sosf = 1;
-  b->descriptor.buf = b->buffer;
-  b->descriptor.offset = 0;
-  b->descriptor.empty = 0;
-  b->descriptor.eof = 1;
-  b->descriptor.qe.stqe_next = 0;
+  transferBuffer->descriptor.length = bytes;
+  transferBuffer->descriptor.size = bytes;
+  transferBuffer->descriptor.owner = 1;
+  transferBuffer->descriptor.sosf = 1;
+  transferBuffer->descriptor.buf = transferBuffer->buffer;
+  transferBuffer->descriptor.offset = 0;
+  transferBuffer->descriptor.empty = 0;
+  transferBuffer->descriptor.eof = 1;
+  transferBuffer->descriptor.qe.stqe_next = 0;
 #elif CONFIG_IDF_TARGET_ESP32S3
-  b->dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
-  b->dw0.size = bytes;
-  b->dw0.length = bytes;
-  b->dw0.suc_eof = 1;
+  transferBuffer->dw0.owner = DMA_DESCRIPTOR_BUFFER_OWNER_DMA;
+  transferBuffer->dw0.size = bytes;
+  transferBuffer->dw0.length = bytes;
+  transferBuffer->dw0.suc_eof = 1;
 #endif
-  return b;
+  return transferBuffer;
 }
 
 // Fill buffer with default "1" bits for idle/sync phases (platform-specific bit layout).
@@ -384,7 +384,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
                                                                        // *mapb, uint8_t *mapw, uint8_t channelsPerLight, int pr, int pg, int pb)
 {
   // driver->leds, driver->stripSize, driver->numStrips, (uint16_t *)driver->transferBuffers[driver->dmaBufferActive]->buffer, driver->ledToDisplay, driver->redMap, driver->greenMap, driver->blueMap,
-  // driver->whiteMap, driver->channelsPerLight, driver->pR, driver->pG, driver->pB);
+  // driver->whiteMap, driver->channelsPerLight, driver->offsetRed, driver->offsetGreen, driver->offsetBlue);
   Lines secondPixel[driver->channelsPerLight];  // temporary buffer for colour components (VLA)
   uint16_t* buffer = nullptr;  // points to active DMA buffer (resolved below)
   if (driver->transpose)
@@ -419,7 +419,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   #endif
 #endif
       // Apply LUT tables + white extraction + channel reorder (Phase 9: unified method, called on all platforms)
-      uint8_t mapped[5] = {};  // temporary buffer holding mapped pixel in wire order (pR/pG/pB/pW/pW2)
+      uint8_t mapped[5] = {};  // temporary buffer holding mapped pixel in wire order (offsetRed/offsetGreen/offsetBlue/offsetWhite/offsetWhite2)
       driver->rgbwBufferMapping(poli, mapped);  // brightness/gamma LUT + white extraction + channel reorder
       // distribute mapped components into their respective colour channels
       for (int c = 0; c < driver->channelsPerLight; c++) secondPixel[c].bytes[i] = mapped[c];
@@ -442,8 +442,8 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   transposeColorChannel(secondPixel[0].bytes, (uint16_t*)buffer, driver->numStrips);
   transposeColorChannel(secondPixel[1].bytes, (uint16_t*)buffer + 3 * 8, driver->numStrips);
   transposeColorChannel(secondPixel[2].bytes, (uint16_t*)buffer + 2 * 3 * 8, driver->numStrips);
-  if (driver->pW != UINT8_MAX) transposeColorChannel(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8, driver->numStrips);
-  if (driver->pW2 != UINT8_MAX) transposeColorChannel(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8, driver->numStrips);
+  if (driver->offsetWhite != UINT8_MAX) transposeColorChannel(secondPixel[3].bytes, (uint16_t*)buffer + 3 * 3 * 8, driver->numStrips);
+  if (driver->offsetWhite2 != UINT8_MAX) transposeColorChannel(secondPixel[4].bytes, (uint16_t*)buffer + 4 * 3 * 8, driver->numStrips);
 }
 
 #endif  // CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3

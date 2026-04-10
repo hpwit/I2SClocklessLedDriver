@@ -19,7 +19,7 @@
  * ColorArrangement — wire order of colour channels.
  *
  * Pass one of these values to the convenience initled() overloads.
- * The canonical initled() takes explicit pR/pG/pB/pW/pW2 offsets instead.
+ * The canonical initled() takes explicit offsetRed/offsetGreen/offsetBlue/offsetWhite/offsetWhite2 offsets instead.
  */
 enum ColorArrangement {
   ORDER_GRBW,
@@ -37,49 +37,49 @@ enum ColorArrangement {
  * applyColorArrangement — decode a ColorArrangement enum into explicit
  * per-channel byte offsets used by the canonical initled().
  *
- * On return, pW and pW2 are UINT8_MAX when the channel is absent.
+ * On return, offsetWhite and offsetWhite2 are UINT8_MAX when the channel is absent.
  *
  * @param cArr          Colour byte order.
  * @param channelsPerLight  Output: bytes per pixel (3, 4, or 5).
- * @param pR            Output: wire-order position of the Red channel.
- * @param pG            Output: wire-order position of the Green channel.
- * @param pB            Output: wire-order position of the Blue channel.
- * @param pW            Output: wire-order position of the White channel (UINT8_MAX = absent).
- * @param pW2           Output: wire-order position of the warm White channel (UINT8_MAX = absent).
+ * @param offsetRed            Output: wire-order position of the Red channel.
+ * @param offsetGreen            Output: wire-order position of the Green channel.
+ * @param offsetBlue            Output: wire-order position of the Blue channel.
+ * @param offsetWhite            Output: wire-order position of the White channel (UINT8_MAX = absent).
+ * @param offsetWhite2           Output: wire-order position of the warm White channel (UINT8_MAX = absent).
  */
 inline void applyColorArrangement(ColorArrangement cArr,
                                    uint8_t& channelsPerLight,
-                                   uint8_t& pR, uint8_t& pG, uint8_t& pB,
-                                   uint8_t& pW, uint8_t& pW2) {
-  pW  = UINT8_MAX;
-  pW2 = UINT8_MAX;
+                                   uint8_t& offsetRed, uint8_t& offsetGreen, uint8_t& offsetBlue,
+                                   uint8_t& offsetWhite, uint8_t& offsetWhite2) {
+  offsetWhite  = UINT8_MAX;
+  offsetWhite2 = UINT8_MAX;
   switch (cArr) {
   case ORDER_RGB:
-    channelsPerLight = 3; pR = 0; pG = 1; pB = 2;
+    channelsPerLight = 3; offsetRed = 0; offsetGreen = 1; offsetBlue = 2;
     break;
   case ORDER_RBG:
-    channelsPerLight = 3; pR = 0; pG = 2; pB = 1;
+    channelsPerLight = 3; offsetRed = 0; offsetGreen = 2; offsetBlue = 1;
     break;
   case ORDER_GRB:
-    channelsPerLight = 3; pR = 1; pG = 0; pB = 2;
+    channelsPerLight = 3; offsetRed = 1; offsetGreen = 0; offsetBlue = 2;
     break;
   case ORDER_GBR:
-    channelsPerLight = 3; pR = 2; pG = 0; pB = 1;
+    channelsPerLight = 3; offsetRed = 2; offsetGreen = 0; offsetBlue = 1;
     break;
   case ORDER_BRG:
-    channelsPerLight = 3; pR = 1; pG = 2; pB = 0;
+    channelsPerLight = 3; offsetRed = 1; offsetGreen = 2; offsetBlue = 0;
     break;
   case ORDER_BGR:
-    channelsPerLight = 3; pR = 2; pG = 1; pB = 0;
+    channelsPerLight = 3; offsetRed = 2; offsetGreen = 1; offsetBlue = 0;
     break;
   case ORDER_GRBW:
-    channelsPerLight = 4; pR = 1; pG = 0; pB = 2; pW = 3;
+    channelsPerLight = 4; offsetRed = 1; offsetGreen = 0; offsetBlue = 2; offsetWhite = 3;
     break;
   case ORDER_RGBW:
-    channelsPerLight = 4; pR = 0; pG = 1; pB = 2; pW = 3;
+    channelsPerLight = 4; offsetRed = 0; offsetGreen = 1; offsetBlue = 2; offsetWhite = 3;
     break;
   case ORDER_RGBCCT:
-    channelsPerLight = 5; pR = 0; pG = 1; pB = 2; pW = 3; pW2 = 4;
+    channelsPerLight = 5; offsetRed = 0; offsetGreen = 1; offsetBlue = 2; offsetWhite = 3; offsetWhite2 = 4;
     break;
   }
 }

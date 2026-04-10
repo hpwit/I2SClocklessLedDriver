@@ -30,7 +30,7 @@ clock_speed clock800Khz = {6, 4, 1};
  *   P4       — isDisplaying is always false (hwStop is synchronous), so the wait
  *              block is a no-op; execution falls straight through to deleteDriver().
  */
-void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2, bool extractWhiteFromRGB) {
+void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite, uint8_t offsetWhite2, bool extractWhiteFromRGB) {
   if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS || dmaBuffer == 0) {
     ESP_LOGE(TAG, "updateDriver: invalid args numStrips=%u dmaBuffer=%u sizes=%p pinsq=%p", numStrips, dmaBuffer, (void*)sizes, (void*)pinsq);
     return;  // leave driver in previous consistent state
@@ -54,16 +54,27 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   }
 
   // Free old transfer buffers BEFORE updating geometry (deleteBuffers uses old nbDmaBuffer and numLedPerStrip)
+  // deleteBuffers() resets error state at the start
   deleteBuffers();
 
   // Apply all configuration (geometry, color, pins, timing) from new arguments
-  applyConfiguration(pinsq, sizes, numStrips, dmaBuffer, channelsPerLight, pR, pG, pB, pW, pW2, extractWhiteFromRGB);
+  applyConfiguration(pinsq, sizes, numStrips, dmaBuffer, channelsPerLight, offsetRed, offsetGreen, offsetBlue, offsetWhite, offsetWhite2, extractWhiteFromRGB);
 
   // Reallocate transfer buffers with new geometry
   initBuffers();
 
+  if (initErrorOccurred) {
+    initSuccess = false;
+    return;
+  }
+
   // Restore brightness
   setBrightness(brightness);
+
+  if (initErrorOccurred) {
+    initSuccess = false;
+    return;
+  }
 
   initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   ESP_LOGD(TAG, "updateDriver %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
@@ -72,8 +83,12 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
 /** deleteBuffers — frees all runtime buffers; symmetric with initBuffers().
  *  Frees: transfer buffers, FULL_DMA buffers, sprites (HARDWARESPRITES), hmap (__HARDWARE_MAP).
  *  Does NOT free semaphores — they persist across reconfiguration.
+ *  Resets error flags at start so retry after a failed operation works correctly.
  *  Does not affect hardware state; assumes hardware is already idle or stopped separately. */
 void I2SClocklessLedDriver::deleteBuffers() {
+  // Reset error state so reconfiguration/retry works correctly
+  initErrorOccurred = false;
+  initSuccess = false;
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
   if (transferBuffers) {
     for (int i = 0; i < nbDmaBuffer + 2; i++) {
@@ -272,13 +287,35 @@ void I2SClocklessLedDriver::initBuffers() {
    * so the I2S returns to zero with enough inter-frame gap for LOOP mode.
    */
   dmaBuffersTransposed = (I2SClocklessLedDriverDMABuffer**)malloc(sizeof(I2SClocklessLedDriverDMABuffer*) * (numLedPerStrip + 2));
+  if (!dmaBuffersTransposed) {
+    ESP_LOGE(TAG, "initBuffers: failed to allocate dmaBuffersTransposed array");
+    initErrorOccurred = true;
+    return;
+  }
+
   for (int i = 0; i < numLedPerStrip + 2; i++) {
     if (i < numLedPerStrip + 1)
       dmaBuffersTransposed[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
     else
       dmaBuffersTransposed[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3 * 4);
+
+    if (!dmaBuffersTransposed[i]) {
+      ESP_LOGE(TAG, "initBuffers: failed to allocate dmaBuffersTransposed[%d]", i);
+      // Clean up previously allocated buffers
+      for (int j = 0; j < i; j++) {
+        if (dmaBuffersTransposed[j]) {
+          if (dmaBuffersTransposed[j]->buffer) heap_caps_free(dmaBuffersTransposed[j]->buffer);
+          heap_caps_free(dmaBuffersTransposed[j]);
+        }
+      }
+      free(dmaBuffersTransposed);
+      dmaBuffersTransposed = nullptr;
+      initErrorOccurred = true;
+      return;
+    }
+
     if (i < numLedPerStrip) dmaBuffersTransposed[i]->descriptor.eof = 0;
-    if (i) {
+    if (i > 0) {
       dmaBuffersTransposed[i - 1]->descriptor.qe.stqe_next = &(dmaBuffersTransposed[i]->descriptor);
       if (i < numLedPerStrip + 1) {
         putdefaultones((uint16_t*)dmaBuffersTransposed[i]->buffer);
@@ -404,7 +441,7 @@ void I2SClocklessLedDriver::initBuffers() {
  *  Sets geometry (strips, sizes, LED counts, offsets), color order, DMA buffer count,
  *  and pin array.  Does NOT touch hardware, allocate buffers, or change gamma/leds.
  *  Called by initled() (preserves nbDmaBuffer default) and updateDriver() (uses new dmaBuffer). */
-void I2SClocklessLedDriver::applyConfiguration(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2, bool extractWhiteFromRGB) {
+void I2SClocklessLedDriver::applyConfiguration(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite, uint8_t offsetWhite2, bool extractWhiteFromRGB) {
   this->numStrips = numStrips;
   totalLeds = 0;
   firstIndexPerOutput[0] = 0;
@@ -422,11 +459,11 @@ void I2SClocklessLedDriver::applyConfiguration(uint8_t* pinsq, uint16_t* sizes, 
   linewidth = this->numLedPerStrip;
   nbDmaBuffer = dmaBuffer;
   this->channelsPerLight = channelsPerLight;
-  this->pR = pR;
-  this->pG = pG;
-  this->pB = pB;
-  this->pW = pW;
-  this->pW2 = pW2;
+  this->offsetRed = offsetRed;
+  this->offsetGreen = offsetGreen;
+  this->offsetBlue = offsetBlue;
+  this->offsetWhite = offsetWhite;
+  this->offsetWhite2 = offsetWhite2;
   this->extractWhiteFromRGB = extractWhiteFromRGB;
 
   // Clear all pin slots first to avoid stale values when shrinking or re-using
