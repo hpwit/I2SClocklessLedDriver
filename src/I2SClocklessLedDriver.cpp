@@ -20,9 +20,9 @@ clock_speed clock800Khz = {6, 4, 1};
 
 /**
  * updateDriver — reconfigures the driver at runtime (pin map, strip count/lengths,
- * DMA buffer depth, colour order).  Tears down all hardware resources, applies the
- * new configuration, then reinitialises — same sequence as initLedImpl but preceded
- * by a wait for any in-flight transfer and a full teardown.  Leaves the object
+ * DMA buffer depth, colour order).  Waits for any in-flight transfer, frees buffers,
+ * applies the new configuration, then reallocates — same sequence as initled() but
+ * skipping hardware init (hwInit) and gamma reset.  Leaves the object
  * unchanged if arguments are invalid or if the DMA wait times out.
  *
  * Platform notes:
@@ -35,10 +35,6 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
     ESP_LOGE(TAG, "updateDriver: invalid args numStrips=%u dmaBuffer=%u sizes=%p pinsq=%p", numStrips, dmaBuffer, (void*)sizes, (void*)pinsq);
     return;  // leave driver in previous consistent state
   }
-
-  // Compute new geometry before deleteDriver() which still needs the old numLedPerStrip
-  // as a loop bound (FULL_DMA_BUFFER frees iterate up to numLedPerStrip + 2).
-  uint16_t newNumLedPerStrip = maxLength(sizes, numStrips);
 
   // Wait for any in-progress transfer.  On P4, isDisplaying is always false so this
   // block is unreachable; on ESP32/S3 the ISR signals waitDisp when the frame ends.
@@ -57,83 +53,28 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
     wasWaitingtofinish = false;
   }
 
-  deleteDriver();  // tears down HW (GDMA/ISR on S3/ESP32, PARLIO on P4) and frees buffers
+  // Free old transfer buffers BEFORE updating geometry (deleteBuffers uses old nbDmaBuffer and numLedPerStrip)
+  deleteBuffers();
 
-  #if true // true works well, false gives on esp32-S3: [  5603][W][I2SClocklessLedDriver.h:1434] showPixelsImpl(): [🐸] sem wait too long and Task watchdog got triggered. The following tasks/users did not reset the watchdog in time:E (20254) task_wdt:  - AppDrivers (CPU 1)E (20254) task_wdt:  - AppEffects (CPU 0) - very strange as both code looks identicalF
-  initErrorOccurred = false;
-  initSuccess = false;
+  // Apply all configuration (geometry, color, pins, timing) from new arguments
+  applyConfiguration(pinsq, sizes, numStrips, dmaBuffer, channelsPerLight, pR, pG, pB, pW, pW2, extractWhiteFromRGB);
 
-  this->numStrips = numStrips;
-  totalLeds = 0;
-  firstIndexPerOutput[0] = 0;
-  for (int i = 0; i < numStrips; i++) {
-    stripSize[i] = sizes[i];
-    totalLeds += sizes[i];
-    if (i > 0) firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + sizes[i - 1];
-  }
-  this->numLedPerStrip = newNumLedPerStrip;
-  offsetDisplay.offsetx = 0;
-  offsetDisplay.offsety = 0;
-  offsetDisplay.panelWidth = newNumLedPerStrip;
-  offsetDisplay.panelHeight = 9999;
-  defaultOffsetDisplay = offsetDisplay;
-  linewidth = newNumLedPerStrip;
-  nbDmaBuffer = dmaBuffer;
-  this->channelsPerLight = channelsPerLight;
-  this->pR = pR;
-  this->pG = pG;
-  this->pB = pB;
-  this->pW = pW;
-  this->pW2 = pW2;
+  // Reallocate transfer buffers with new geometry
+  initBuffers();
 
-  setShowDelay();
-  setPins(pinsq);
+  // Restore brightness
   setBrightness(brightness);
 
-  initTransferBuffers();
   initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   ESP_LOGD(TAG, "updateDriver %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
-#else
-  nbDmaBuffer = dmaBuffer;  // set DMA buffer count before reinit
-
-  s3patch_inclhwInit = false;
-
-  // Reinitialize via initled() — handles geometry setup and calls initLedImpl()
-  initled(this->leds, pinsq, sizes, numStrips, channelsPerLight, pR, pG, pB, pW, pW2, extractWhiteFromRGB);
-
-  s3patch_inclhwInit = true;
-
-  // Restore brightness after reinitialization
-  // setBrightness(brightness);
-  ESP_LOGD(TAG, "updateDriver %d x %d (%d)", numStrips, numLedPerStrip, nbDmaBuffer);
-  #endif
 }
 
-/** deleteDriver — tears down all hardware resources and frees all buffers.
- *  Safe to call multiple times (all handles/pointers are nulled after free).
- *  After this call the driver is fully quiesced; hwInit() + initTransferBuffers()
- *  are required before the next showPixels(). */
-void I2SClocklessLedDriver::deleteDriver() {
+/** deleteBuffers — frees all runtime buffers; symmetric with initBuffers().
+ *  Frees: transfer buffers, FULL_DMA buffers, sprites (HARDWARESPRITES), hmap (__HARDWARE_MAP).
+ *  Does NOT free semaphores — they persist across reconfiguration.
+ *  Does not affect hardware state; assumes hardware is already idle or stopped separately. */
+void I2SClocklessLedDriver::deleteBuffers() {
 #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
-  // Tear down hardware before freeing DMA buffers so the peripheral cannot
-  // continue to access memory that is about to be freed.
-  #ifdef CONFIG_IDF_TARGET_ESP32
-  if (intrHandle != nullptr) {
-    esp_intr_free(intrHandle);
-    intrHandle = nullptr;
-  }
-  // Reset and disable the I2S peripheral completely
-  periph_module_disable(I2S_DEVICE == 0 ? PERIPH_I2S0_MODULE : PERIPH_I2S1_MODULE);
-  #elif CONFIG_IDF_TARGET_ESP32S3
-  if (dmaChan != nullptr) {
-    gdma_disconnect(dmaChan);
-    gdma_del_channel(dmaChan);
-    dmaChan = nullptr;
-  }
-  // // Reset and disable the LCD_CAM peripheral completely - update: this caused watchdogs, as recreation seems to fail ...
-  // periph_module_reset(PERIPH_LCD_CAM_MODULE);
-  // periph_module_disable(PERIPH_LCD_CAM_MODULE);
-  #endif
   if (transferBuffers) {
     for (int i = 0; i < nbDmaBuffer + 2; i++) {
       if (transferBuffers[i]) {
@@ -149,9 +90,9 @@ void I2SClocklessLedDriver::deleteDriver() {
   #if HAS_PARLIO_DRIVER
   if (p4TxUnit != NULL) {
     esp_err_t err;
-    if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "deleteDriver: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
-    if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "deleteDriver: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
-    if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "deleteDriver: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
+    if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "deleteBuffers: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+    if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "deleteBuffers: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+    if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "deleteBuffers: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
     p4TxUnit = NULL;
   }
   #endif
@@ -165,7 +106,6 @@ void I2SClocklessLedDriver::deleteDriver() {
   }
   p4BufferActive = nullptr;
 #endif
-  initSuccess = false;
 
 #ifdef FULL_DMA_BUFFER
   if (dmaBuffersTransposed) {
@@ -196,9 +136,305 @@ void I2SClocklessLedDriver::deleteDriver() {
   }
   #endif
 #endif
+}
 
+/** deleteDriver — tears down all hardware resources and frees all buffers.
+ *  Safe to call multiple times (all handles/pointers are nulled after free).
+ *  After this call the driver is fully quiesced; hwInit() + initBuffers()
+ *  are required before the next showPixels(). */
+void I2SClocklessLedDriver::deleteDriver() {
+  initErrorOccurred = false;
+  initSuccess = false;
+
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+  // Disable interrupts first to prevent ISR from running while we tear down hardware.
+  // This avoids race conditions where the ISR tries to access registers/buffers being freed.
+  #ifdef CONFIG_IDF_TARGET_ESP32
+  if (intrHandle != nullptr) {
+    esp_intr_disable(intrHandle);  // Disable before freeing to stop ISR execution
+  }
+  #elif CONFIG_IDF_TARGET_ESP32S3
+  if (dmaChan != nullptr) {
+    // Disable GDMA interrupt callback to prevent ISR firing during teardown
+    gdma_tx_event_callbacks_t nullCbs = {.on_trans_eof = NULL, .on_descr_err = NULL};
+    gdma_register_tx_event_callbacks(dmaChan, &nullCbs, this);
+  }
+  #endif
+
+  // Brief delay to ensure any in-flight ISR completes gracefully
+  vTaskDelay(pdMS_TO_TICKS(5));
+
+  // Tear down hardware before freeing DMA buffers so the peripheral cannot
+  // continue to access memory that is about to be freed.
+  #ifdef CONFIG_IDF_TARGET_ESP32
+  if (intrHandle != nullptr) {
+    esp_intr_free(intrHandle);
+    intrHandle = nullptr;
+  }
+  // Reset and disable the I2S peripheral completely
+  periph_module_disable(I2S_DEVICE == 0 ? PERIPH_I2S0_MODULE : PERIPH_I2S1_MODULE);
+  #elif CONFIG_IDF_TARGET_ESP32S3
+  if (dmaChan != nullptr) {
+    gdma_disconnect(dmaChan);
+    gdma_del_channel(dmaChan);
+    dmaChan = nullptr;
+  }
+  // Reset and disable the LCD_CAM peripheral completely - update : this caused watchdogs, as recreation seems to fail... periph_module_reset(PERIPH_LCD_CAM_MODULE);
+  periph_module_disable(PERIPH_LCD_CAM_MODULE);
+  vTaskDelay(pdMS_TO_TICKS(50));
+  #endif
+#elif CONFIG_IDF_TARGET_ESP32P4
+  // P4: wait for PARLIO to finish before cleanup
+  #if HAS_PARLIO_DRIVER
+  if (p4TxUnit != NULL) {
+    esp_err_t err;
+    if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "deleteDriver: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+    if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "deleteDriver: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+  }
+  #endif
+#endif
+
+  // Free all buffers (transfer buffers, FULL_DMA buffers, sprites, hmap)
+  deleteBuffers();
+
+  // Free semaphores (only on full teardown, not on buffer reallocation)
   if (waitDisp) {
     vSemaphoreDelete(waitDisp);
     waitDisp = NULL;
   }
+}
+
+/** initBuffers — allocate all runtime buffers from current geometry.
+ *  Symmetric with deleteBuffers(): everything freed there is (re)allocated here.
+ *  Called after applyConfiguration() so geometry/color members are already set.
+ *  Used by both initled() (full initialization) and updateDriver() (reconfiguration). */
+void I2SClocklessLedDriver::initBuffers() {
+  setPins(this->pins);
+
+#if HARDWARESPRITES == 1
+  target = (uint16_t*)malloc(numLedPerStrip * numStrips * 2 + 2);
+  if (!target) {
+    ESP_LOGE(TAG, "initBuffers: failed to allocate hardware sprite target buffer");
+    initErrorOccurred = true;
+    return;
+  }
+#endif
+
+#ifdef __HARDWARE_MAP
+  #ifndef __NON_HEAP
+  hmap = (uint32_t*)malloc(totalLeds * 2);
+  if (!hmap) {
+    ESP_LOGE(TAG, "initBuffers: failed to allocate hardware map buffer");
+    initErrorOccurred = true;
+    return;
+  }
+  #endif
+  if (!hmap) {
+    ESP_LOGE(TAG, "initBuffers: no memory for hmap");
+    initErrorOccurred = true;
+    return;
+  }
+  createhardwareMap();
+#endif
+
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+  #ifdef CONFIG_IDF_TARGET_ESP32  // d0-wrover crashes with memory region error if set in PSRAM
+  transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_DEFAULT, MALLOC_CAP_DEFAULT);
+  #elif CONFIG_IDF_TARGET_ESP32S3
+  transferBuffers = (I2SClocklessLedDriverDMABuffer**)heap_caps_calloc_prefer(nbDmaBuffer + 2, sizeof(I2SClocklessLedDriverDMABuffer*), 2, MALLOC_CAP_SPIRAM, MALLOC_CAP_DEFAULT);
+  #endif
+  if (!transferBuffers) {
+    ESP_LOGE(TAG, "initBuffers: failed to allocate transferBuffers array");
+    initErrorOccurred = true;
+    return;
+  }
+  for (int i = 0; i < nbDmaBuffer + 1; i++) {
+    transferBuffers[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
+    if (!transferBuffers[i]) {
+      ESP_LOGE(TAG, "initBuffers: failed to allocate transferBuffers[%d]", i);
+      initErrorOccurred = true;
+      return;
+    }
+  }
+  transferBuffers[nbDmaBuffer + 1] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3 * 4);
+  if (!transferBuffers[nbDmaBuffer + 1]) {
+    ESP_LOGE(TAG, "initBuffers: failed to allocate transferBuffers[%d]", nbDmaBuffer + 1);
+    initErrorOccurred = true;
+    return;
+  }
+  for (int i = 0; i < nbDmaBuffer; i++) {
+    putdefaultones((uint16_t*)transferBuffers[i]->buffer);
+  }
+
+  #ifdef FULL_DMA_BUFFER
+  /*
+   * Create n+2 buffers: buffer[0] ensures lines start at zero; buffer[n+1] is longer
+   * so the I2S returns to zero with enough inter-frame gap for LOOP mode.
+   */
+  dmaBuffersTransposed = (I2SClocklessLedDriverDMABuffer**)malloc(sizeof(I2SClocklessLedDriverDMABuffer*) * (numLedPerStrip + 2));
+  for (int i = 0; i < numLedPerStrip + 2; i++) {
+    if (i < numLedPerStrip + 1)
+      dmaBuffersTransposed[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3);
+    else
+      dmaBuffersTransposed[i] = allocateDMABuffer(channelsPerLight * 8 * 2 * 3 * 4);
+    if (i < numLedPerStrip) dmaBuffersTransposed[i]->descriptor.eof = 0;
+    if (i) {
+      dmaBuffersTransposed[i - 1]->descriptor.qe.stqe_next = &(dmaBuffersTransposed[i]->descriptor);
+      if (i < numLedPerStrip + 1) {
+        putdefaultones((uint16_t*)dmaBuffersTransposed[i]->buffer);
+      }
+    }
+  }
+  #endif
+
+#elif CONFIG_IDF_TARGET_ESP32P4
+  if (!p4Buffer1) {
+    p4Buffer1 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+    if (!p4Buffer1) {
+      ESP_LOGE(TAG, "initBuffers: failed to allocate p4Buffer1 — out of memory");
+      initErrorOccurred = true;
+      return;
+    }
+  }
+  if (!p4Buffer2) {
+    p4Buffer2 = (uint16_t*)heap_caps_calloc_prefer(PARLIO_P4_BUFFER_BYTES, 1, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA | MALLOC_CAP_CACHE_ALIGNED, MALLOC_CAP_DMA);
+    if (!p4Buffer2) {
+      ESP_LOGE(TAG, "initBuffers: failed to allocate p4Buffer2 — out of memory");
+      heap_caps_free(p4Buffer1);
+      p4Buffer1 = nullptr;
+      p4BufferActive = nullptr;
+      initErrorOccurred = true;
+      return;
+    }
+  }
+  p4BufferActive = p4Buffer1;
+
+  #if !HAS_PARLIO_DRIVER
+  ESP_LOGE(TAG, "PARLIO driver not available — ESP-IDF v5.1+ required for ESP32-P4 support");
+  initErrorOccurred = true;
+  return;
+  #else
+  {
+    uint8_t outputs = numStrips;
+    if (outputs > SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH) {
+      ESP_LOGE(TAG, "initBuffers: numStrips (%u) exceeds SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH (%u)", outputs, SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH);
+      initErrorOccurred = true;
+      return;
+    }
+    const uint16_t max_leds = numLedPerStrip;
+
+    p4Config.clk_src = PARLIO_CLK_SRC_DEFAULT;
+    if (outputs <= 1)
+      p4Config.data_width = 1;
+    else if (outputs <= 2)
+      p4Config.data_width = 2;
+    else if (outputs <= 4)
+      p4Config.data_width = 4;
+    else if (outputs <= 8)
+      p4Config.data_width = 8;
+    else
+      p4Config.data_width = 16;
+
+    const uint32_t required_bytes = ((uint32_t)max_leds * channelsPerLight * 32u * p4Config.data_width + 7u) / 8u;
+    if (required_bytes > PARLIO_P4_BUFFER_BYTES) {
+      ESP_LOGE(TAG, "initBuffers: configuration requires %u bytes, but only %u are allocated", (unsigned)required_bytes, (unsigned)PARLIO_P4_BUFFER_BYTES);
+      initErrorOccurred = true;
+      return;
+    }
+
+    p4Config.clk_in_gpio_num = gpio_num_t(-1);
+    p4Config.valid_gpio_num = gpio_num_t(-1);
+    p4Config.clk_out_gpio_num = gpio_num_t(-1);
+
+    for (int i = 0; i < SOC_PARLIO_TX_UNIT_MAX_DATA_WIDTH; ++i) {
+      p4Config.data_gpio_nums[i] = (i < outputs) ? gpio_num_t(pins[i]) : gpio_num_t(-1);
+    }
+
+    #ifdef PARLIO_AUTO_OVERCLOCK
+    if (max_leds <= 256)
+      p4Config.output_clk_freq_hz = 1200000u * 4u;
+    else if (max_leds <= 512)
+      p4Config.output_clk_freq_hz = 1100000u * 4u;
+    else
+      p4Config.output_clk_freq_hz = 800000u * 4u;
+    #else
+    p4Config.output_clk_freq_hz = 800000u * 4u;
+    #endif
+    p4Config.valid_start_delay = 0;
+    p4Config.valid_stop_delay = 0;
+    p4Config.dma_burst_size = 64;
+    p4Config.trans_queue_depth = 16;
+    p4Config.max_transfer_size = 65535;
+    p4Config.flags.clk_gate_en = 0;
+    p4Config.flags.io_loop_back = 0;
+    p4Config.flags.allow_pd = 0;
+    p4Config.flags.invert_valid_out = 0;
+
+    if (p4TxUnit != NULL) {
+      esp_err_t err;
+      if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "initBuffers: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
+      if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "initBuffers: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
+      if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "initBuffers: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
+      p4TxUnit = NULL;
+    }
+
+    esp_err_t err;
+    if ((err = parlio_new_tx_unit(&p4Config, &p4TxUnit)) != ESP_OK) {
+      ESP_LOGE(TAG, "initBuffers: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
+      p4TxUnit = NULL;
+      initErrorOccurred = true;
+      return;
+    }
+    if ((err = parlio_tx_unit_enable(p4TxUnit)) != ESP_OK) {
+      ESP_LOGE(TAG, "initBuffers: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
+      parlio_del_tx_unit(p4TxUnit);
+      p4TxUnit = NULL;
+      initErrorOccurred = true;
+      return;
+    }
+
+    ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)", (unsigned)outputs, (unsigned)max_leds);
+  }
+  #endif
+  return;  // P4 done
+#endif
+}
+
+/** applyConfiguration — applies all configuration from arguments to member variables.
+ *  Sets geometry (strips, sizes, LED counts, offsets), color order, DMA buffer count,
+ *  and pin array.  Does NOT touch hardware, allocate buffers, or change gamma/leds.
+ *  Called by initled() (preserves nbDmaBuffer default) and updateDriver() (uses new dmaBuffer). */
+void I2SClocklessLedDriver::applyConfiguration(uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t dmaBuffer, uint8_t channelsPerLight, uint8_t pR, uint8_t pG, uint8_t pB, uint8_t pW, uint8_t pW2, bool extractWhiteFromRGB) {
+  this->numStrips = numStrips;
+  totalLeds = 0;
+  firstIndexPerOutput[0] = 0;
+  for (int i = 0; i < numStrips; i++) {
+    stripSize[i] = sizes[i];
+    totalLeds += sizes[i];
+    if (i > 0) firstIndexPerOutput[i] = firstIndexPerOutput[i - 1] + sizes[i - 1];
+  }
+  this->numLedPerStrip = maxLength(sizes, numStrips);
+  offsetDisplay.offsetx = 0;
+  offsetDisplay.offsety = 0;
+  offsetDisplay.panelWidth = this->numLedPerStrip;
+  offsetDisplay.panelHeight = 9999;
+  defaultOffsetDisplay = offsetDisplay;
+  linewidth = this->numLedPerStrip;
+  nbDmaBuffer = dmaBuffer;
+  this->channelsPerLight = channelsPerLight;
+  this->pR = pR;
+  this->pG = pG;
+  this->pB = pB;
+  this->pW = pW;
+  this->pW2 = pW2;
+  this->extractWhiteFromRGB = extractWhiteFromRGB;
+
+  // Clear all pin slots first to avoid stale values when shrinking or re-using
+  memset(this->pins, 0, MAX_PINS * sizeof(uint8_t));
+  for (int i = 0; i < numStrips && i < MAX_PINS; i++) {
+    this->pins[i] = pinsq[i];
+  }
+
+  setShowDelay();
+  ESP_LOGD(TAG, "applyConfiguration %d strips x %d leds (dmaBuffer=%d)", numStrips, this->numLedPerStrip, dmaBuffer);
 }
