@@ -239,11 +239,6 @@ static void IRAM_ATTR interruptHandler(void* arg) {
   if (GET_PERI_REG_BITS(I2S_INT_ST_REG(I2S_DEVICE), I2S_OUT_TOTAL_EOF_INT_ST_S, I2S_OUT_TOTAL_EOF_INT_ST_S)) {
     // ((I2SClocklessLedDriver *)arg)->hwStop();
     hwStop(driver);
-    if (driver->isWaiting) {
-      portBASE_TYPE hpTaskAwoken = 0;
-      xSemaphoreGiveFromISR(driver->sem, &hpTaskAwoken);
-      if (hpTaskAwoken == pdTRUE) portYIELD_FROM_ISR();
-    }
   }
   REG_WRITE(I2S_INT_CLR_REG(0), (REG_READ(I2S_INT_RAW_REG(0)) & 0xffffffc0) | 0x3f);
   #endif

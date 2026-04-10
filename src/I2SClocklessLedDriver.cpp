@@ -237,7 +237,7 @@ void I2SClocklessLedDriver::initBuffers() {
 
 #ifdef __HARDWARE_MAP
   #ifndef __NON_HEAP
-  hmap = (uint32_t*)malloc(totalLeds * 2);
+  hmap = (uint32_t*)malloc(totalLeds * sizeof(*hmap));
   if (!hmap) {
     ESP_LOGE(TAG, "initBuffers: failed to allocate hardware map buffer");
     initErrorOccurred = true;
@@ -314,13 +314,23 @@ void I2SClocklessLedDriver::initBuffers() {
       return;
     }
 
-    if (i < numLedPerStrip) dmaBuffersTransposed[i]->descriptor.eof = 0;
-    if (i > 0) {
-      dmaBuffersTransposed[i - 1]->descriptor.qe.stqe_next = &(dmaBuffersTransposed[i]->descriptor);
-      if (i < numLedPerStrip + 1) {
-        putdefaultones((uint16_t*)dmaBuffersTransposed[i]->buffer);
+    #ifdef CONFIG_IDF_TARGET_ESP32
+      if (i < numLedPerStrip) dmaBuffersTransposed[i]->descriptor.eof = 0;
+      if (i > 0) {
+        dmaBuffersTransposed[i - 1]->descriptor.qe.stqe_next = &(dmaBuffersTransposed[i]->descriptor);
+        if (i < numLedPerStrip + 1) {
+          putdefaultones((uint16_t*)dmaBuffersTransposed[i]->buffer);
+        }
       }
-    }
+    #elif CONFIG_IDF_TARGET_ESP32S3
+      if (i < numLedPerStrip) dmaBuffersTransposed[i]->dw0.suc_eof = 0;
+      if (i > 0) {
+        dmaBuffersTransposed[i - 1]->next = dmaBuffersTransposed[i];
+        if (i < numLedPerStrip + 1) {
+          putdefaultones((uint16_t*)dmaBuffersTransposed[i]->buffer);
+        }
+      }
+    #endif
   }
   #endif
 

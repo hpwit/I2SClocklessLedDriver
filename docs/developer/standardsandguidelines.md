@@ -218,7 +218,7 @@ Prompt pattern:
 Add support for CONFIG_IDF_TARGET_ESP32XX following the pattern used for ESP32-P4.
 The peripheral is [describe: I2S / PARLIO / other].
 Add #ifdef guards in setPins(), initLedImpl(), showPixelsImpl().
-Create src/[driver]_esp32xx.h with hwInit(), initTransferBuffers(),
+Create src/[driver]_esp32xx.h with hwInit(), initBuffers(),
 loadAndTranspose(), hwStart(), hwStop().
 Update platformio.ini, docs/developer/developer.md, docs/enduser/enduser.md.
 ```

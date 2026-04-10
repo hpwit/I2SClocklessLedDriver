@@ -590,12 +590,12 @@ class I2SClocklessLedDriver {
         green -= white;
         blue -= white;
       }
-      dst[offsetWhite] = whiteMap[white];                           // apply white LUT to wire order
+      dst[offsetWhite] = whiteMap[white];                                    // apply white LUT to wire order
       if (offsetWhite2 != UINT8_MAX) dst[offsetWhite2] = white2Map[src[4]];  // apply white2 LUT if present
     }
-    dst[offsetRed] = redMap[red];      // apply red LUT to wire order position
+    dst[offsetRed] = redMap[red];        // apply red LUT to wire order position
     dst[offsetGreen] = greenMap[green];  // apply green LUT to wire order position
-    dst[offsetBlue] = blueMap[blue];    // apply blue LUT to wire order position
+    dst[offsetBlue] = blueMap[blue];     // apply blue LUT to wire order position
   }
 
   void hwInit() {
@@ -791,7 +791,13 @@ class I2SClocklessLedDriver {
 #ifdef FULL_DMA_BUFFER
 
   /** Stops the LOOP display mode started by showPixelsFromBuffer(LOOP). */
-  void stopDisplayLoop() { dmaBuffersTransposed[numLedPerStrip + 1]->descriptor.qe.stqe_next = 0; }
+  void stopDisplayLoop() {
+  #ifdef CONFIG_IDF_TARGET_ESP32
+    dmaBuffersTransposed[numLedPerStrip + 1]->descriptor.qe.stqe_next = 0;
+  #elif CONFIG_IDF_TARGET_ESP32S3
+    dmaBuffersTransposed[numLedPerStrip + 1]->next = 0;
+  #endif
+  }
 
   /** Displays the pre-transposed DMA buffer without re-transposing the leds[] array. Non-blocking. */
   void showPixelsFromBuffer() { showPixelsFromBuffer(NO_WAIT); }
@@ -816,7 +822,11 @@ class I2SClocklessLedDriver {
     displayMode = dispmode;
     isWaiting = false;
     if (dispmode == LOOP or dispmode == LOOP_INTERUPT) {
+  #ifdef CONFIG_IDF_TARGET_ESP32
       dmaBuffersTransposed[numLedPerStrip + 1]->descriptor.qe.stqe_next = &(dmaBuffersTransposed[0]->descriptor);
+  #elif CONFIG_IDF_TARGET_ESP32S3
+      dmaBuffersTransposed[numLedPerStrip + 1]->next = dmaBuffersTransposed[0];
+  #endif
     }
     transpose = false;
     // wasWaitingtofinish = true;
@@ -947,7 +957,7 @@ class I2SClocklessLedDriver {
     uint8_t white = 0;
     if (offsetWhite != UINT8_MAX) {
       white = MIN(red, green);
-      white = MIN(W, blue);
+      white = MIN(white, blue);
       red = red - white;
       green = green - white;
       blue = blue - white;
@@ -1051,13 +1061,13 @@ class I2SClocklessLedDriver {
     uint8_t white = 0;
     if (offsetWhite != UINT8_MAX) {
       white = MIN(red, green);
-      white = MIN(W, blue);
+      white = MIN(white, blue);
       red = red - white;
       green = green - white;
       blue = blue - white;
     }
 
-    setPixelinBuffer(pos, red, green, blue, W);
+    setPixelinBuffer(pos, red, green, blue, white);
   }
 
   /** Initialises the driver without an external LED buffer (buffer managed externally or unused). */
@@ -1190,20 +1200,29 @@ class I2SClocklessLedDriver {
   void showPixelsImpl() {
     if (!enableDriver) {
       isDisplaying = false;
-      if (waitDisp != NULL) xSemaphoreGive(waitDisp);
+      if (wasWaitingtofinish && waitDisp != NULL) {
+        wasWaitingtofinish = false;
+        xSemaphoreGive(waitDisp);
+      }
       return;
     }
 
     if (!initSuccess) {
       isDisplaying = false;
-      if (waitDisp != NULL) xSemaphoreGive(waitDisp);
+      if (wasWaitingtofinish && waitDisp != NULL) {
+        wasWaitingtofinish = false;
+        xSemaphoreGive(waitDisp);
+      }
       return;
     }
 
     if (leds == NULL) {
       ESP_LOGE(TAG, "no leds buffer defined");
       isDisplaying = false;
-      if (waitDisp != NULL) xSemaphoreGive(waitDisp);
+      if (wasWaitingtofinish && waitDisp != NULL) {
+        wasWaitingtofinish = false;
+        xSemaphoreGive(waitDisp);
+      }
       return;
     }
 
@@ -1265,6 +1284,12 @@ class I2SClocklessLedDriver {
     if (loadAndTranspose()) {
       hwStart();
       hwStop();
+    } else {
+      // loadAndTranspose failed (buffer too small) — release waiter
+      if (wasWaitingtofinish && waitDisp != NULL) {
+        wasWaitingtofinish = false;
+        xSemaphoreGive(waitDisp);
+      }
     }
     // If loadAndTranspose fails (buffer too small) the frame is skipped silently;
     // the error was already logged inside loadAndTranspose().
