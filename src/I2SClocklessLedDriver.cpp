@@ -64,6 +64,11 @@ void I2SClocklessLedDriver::updateDriver(uint8_t* pinsq, uint16_t* sizes, uint8_
   initBuffers();
 
   if (initErrorOccurred) {
+    // Free any partial allocations made by initBuffers() before it failed.
+    // deleteBuffers() resets initErrorOccurred; restore it so the caller can
+    // detect the failure via initSuccess == false.
+    deleteBuffers();
+    initErrorOccurred = true;
     initSuccess = false;
     return;
   }

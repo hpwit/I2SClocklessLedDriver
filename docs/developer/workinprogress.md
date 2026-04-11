@@ -44,9 +44,15 @@ initLedImpl(leds, pinsq, numStrips, numLedPerStrip)
   │
   ├─ [CONFIG_IDF_TARGET_ESP32P4]
   │     setPins(pinsq)              → stores pins[] only; PARLIO routes GPIO itself
-  │     hwInit()                    → configures PARLIO TX unit (eager, same as ESP32/S3)
-  │     initBuffers()       → allocates PSRAM ping-pong waveform buffers (~328 KB each)
+  │     hwInit()                    → no-op on P4 (returns immediately; PARLIO peripheral
+  │                                    is brought up lazily, not here)
+  │     initBuffers()               → allocates PSRAM ping-pong waveform buffers (~328 KB each),
+  │                                    populates p4Config (clock, data width, GPIO nums, freq),
+  │                                    sets p4TxUnit = NULL — does NOT create or enable TX unit
   │     return
+  │     [first showPixels() call]
+  │       ensureParlioTxUnitInitialized() → parlio_new_tx_unit(&p4Config) +
+  │                                         parlio_tx_unit_enable() (lazy, once per config)
   │
   └─ [ESP32 / ESP32-S3]
         setPins(pinsq)             → stores pins[]; routes GPIO through I2S signal matrix

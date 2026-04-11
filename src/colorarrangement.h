@@ -51,6 +51,15 @@ inline void applyColorArrangement(ColorArrangement cArr,
                                    uint8_t& channelsPerLight,
                                    uint8_t& offsetRed, uint8_t& offsetGreen, uint8_t& offsetBlue,
                                    uint8_t& offsetWhite, uint8_t& offsetWhite2) {
+  // Pre-initialize all outputs to safe "absent" values.  A missing or
+  // unrecognised ColorArrangement would otherwise leave channelsPerLight and
+  // the RGB offsets uninitialised, causing out-of-bounds access in
+  // rgbwBufferMapping().  channelsPerLight = 0 is caught by the > 0 guard in
+  // initled() / updateDriver(); UINT8_MAX offsets produce zero output safely.
+  channelsPerLight = 0;
+  offsetRed   = UINT8_MAX;
+  offsetGreen = UINT8_MAX;
+  offsetBlue  = UINT8_MAX;
   offsetWhite  = UINT8_MAX;
   offsetWhite2 = UINT8_MAX;
   switch (cArr) {

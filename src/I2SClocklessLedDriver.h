@@ -203,6 +203,11 @@ extern clock_speed clock800Khz;
 #endif
 // #define FULL_DMA_BUFFER
 
+// FULL_DMA_BUFFER uses the I2S/DMA descriptor ring which does not exist on P4 (PARLIO path).
+#if defined(FULL_DMA_BUFFER) && defined(CONFIG_IDF_TARGET_ESP32P4)
+  #error "FULL_DMA_BUFFER is not supported on ESP32-P4 — the PARLIO path has no DMA descriptor ring"
+#endif
+
 #define MAX_PINS 20  // maximum number of pins supported, 🌙 was 16, set to 20, okay?
 
 typedef union {
@@ -1423,10 +1428,57 @@ class I2SClocklessLedDriver {
    * @param offsetWhite2               Wire-order byte offset of the warm White channel (UINT8_MAX = absent).
    * @param extractWhiteFromRGB  Derive white from the minimum of R/G/B and subtract.
    */
+  /** Validate that channelsPerLight and per-channel offsets describe a legal,
+   *  non-overlapping wire layout that fits within the mapped[] array (size 5).
+   *  Returns false and logs an error on any violation; true when valid. */
+  static bool validateChannelLayout(uint8_t channelsPerLight,
+                                    uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue,
+                                    uint8_t offsetWhite, uint8_t offsetWhite2) {
+    if (channelsPerLight < 3 || channelsPerLight > 5) {
+      ESP_LOGE(TAG, "validateChannelLayout: channelsPerLight=%u must be 3-5", channelsPerLight);
+      return false;
+    }
+    if (offsetRed >= channelsPerLight || offsetGreen >= channelsPerLight || offsetBlue >= channelsPerLight) {
+      ESP_LOGE(TAG, "validateChannelLayout: RGB offsets must be < channelsPerLight(%u)", channelsPerLight);
+      return false;
+    }
+    if (offsetRed == offsetGreen || offsetRed == offsetBlue || offsetGreen == offsetBlue) {
+      ESP_LOGE(TAG, "validateChannelLayout: RGB offsets must be distinct");
+      return false;
+    }
+    if (offsetWhite != UINT8_MAX) {
+      if (offsetWhite >= channelsPerLight || offsetWhite == offsetRed || offsetWhite == offsetGreen || offsetWhite == offsetBlue) {
+        ESP_LOGE(TAG, "validateChannelLayout: offsetWhite=%u invalid or clashes with RGB", offsetWhite);
+        return false;
+      }
+    }
+    if (offsetWhite2 != UINT8_MAX) {
+      if (offsetWhite2 >= channelsPerLight || offsetWhite2 == offsetRed || offsetWhite2 == offsetGreen || offsetWhite2 == offsetBlue) {
+        ESP_LOGE(TAG, "validateChannelLayout: offsetWhite2=%u invalid or clashes with RGB", offsetWhite2);
+        return false;
+      }
+      if (offsetWhite != UINT8_MAX && offsetWhite2 == offsetWhite) {
+        ESP_LOGE(TAG, "validateChannelLayout: offsetWhite2 must differ from offsetWhite");
+        return false;
+      }
+    }
+    return true;
+  }
+
   void initled(uint8_t* leds, uint8_t* pinsq, uint16_t* sizes, uint8_t numStrips, uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite = UINT8_MAX, uint8_t offsetWhite2 = UINT8_MAX, bool extractWhiteFromRGB = false) {
     if (pinsq == nullptr || sizes == nullptr || numStrips == 0 || numStrips > MAX_PINS) {
       ESP_LOGE(TAG, "initled: invalid args numStrips=%u sizes=%p pinsq=%p", numStrips, (void*)sizes, (void*)pinsq);
       return;
+    }
+    // ESP32/S3: hardware parallel output is 16-lane wide; P4 limit is checked in initBuffers().
+#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S3
+    if (numStrips > 16) {
+      ESP_LOGE(TAG, "initled: numStrips=%u exceeds 16-lane hardware limit on ESP32/S3", numStrips);
+      return;
+    }
+#endif
+    if (!validateChannelLayout(channelsPerLight, offsetRed, offsetGreen, offsetBlue, offsetWhite, offsetWhite2)) {
+      return;  // error already logged inside validateChannelLayout
     }
 
     // Reset error state so retry after a failed initled() works correctly.
@@ -1461,6 +1513,15 @@ class I2SClocklessLedDriver {
     // Configure pins and allocate transfer buffers
     initBuffers();
 
+    if (initErrorOccurred) {
+      // Free any partial allocations made by initBuffers() before it failed.
+      // deleteBuffers() resets initErrorOccurred; restore it so the caller can
+      // detect the failure via initSuccess == false.
+      deleteBuffers();
+      initErrorOccurred = true;
+      initSuccess = false;
+      return;
+    }
     initSuccess = !initErrorOccurred && numStrips > 0 && numLedPerStrip > 0;
   }
 
