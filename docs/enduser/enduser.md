@@ -7,7 +7,7 @@ If upgrading from an older release, the following types were renamed:
 | Old name | New name | Notes |
 |---|---|---|
 | `frameBuffer` | `FrameBuffer` | Also exposes a new `valid()` method (see below) |
-| `hardwareSprite` | `HardwareSprite` | |
+| `HardwareSprite` | `HardwareSprite` | |
 | `leddirection` | `LedDirection` | Now an `enum class`; use `LedDirection::FORWARD`, `LedDirection::BACKWARD`, etc. |
 | `colorarrangment` | `ColorArrangement` | Typo fix |
 | `displayMode` (enum) | `DisplayMode` | Member variable and enum values (`NO_WAIT`, `WAIT`, `LOOP`) unchanged |
@@ -265,7 +265,7 @@ sprite.posY = 5;
 sprite.displaySprite = true;
 ```
 
-Each `hardwareSprite` writes into a pre-allocated segment of `_spritesleds[]`. A maximum of `NBSPRITE` sprites can be constructed.
+Each `HardwareSprite` writes into a pre-allocated segment of `_spritesleds[]`. A maximum of `NBSPRITE` sprites can be constructed.
 
 ---
 
@@ -307,13 +307,46 @@ FastLED.setBrightness(128);  // note: use driver.setBrightness instead
 
 ---
 
+## ESP32-P4
+
+The ESP32-P4 is fully supported using the **Parallel IO (PARLIO)** peripheral.  The same `initled()` + `showPixels()` API works on all targets:
+
+```cpp
+#include "I2SClocklessLedDriver.h"
+
+I2SClocklessLedDriver driver;
+uint8_t leds[8 * 144 * 3];
+uint8_t pins[8] = {2, 4, 5, 12, 13, 14, 15, 16};
+
+void setup() {
+  driver.initled(leds, pins, 8, 144, ORDER_GRB);
+  driver.setBrightness(128);
+}
+
+void loop() {
+  // fill leds[] ...
+  driver.showPixels(WAIT);
+}
+```
+
+Variable strip lengths, RGBW, and RGBCCT work identically to other targets.
+
+### P4-specific notes
+
+- **No I2S peripheral** — PARLIO TX is used instead.  No `FULL_DMA_BUFFER`, `LOOP`, or `showPixelsFromBuffer()` modes are available on P4.
+- **PSRAM** — the dual waveform buffers (~656 KB total for the maximum 1024 LEDs × 16 outputs × 5 channels) are allocated in PSRAM+DMA.  A P4 board with PSRAM is strongly recommended for more than a few strips.
+- **Adaptive clock** — define `PARLIO_AUTO_OVERCLOCK` to enable automatic clock scaling (1.2 MHz for ≤256 LEDs/output, 1.1 MHz for ≤512, 800 kHz otherwise).  This can improve FPS with short strips.
+- **First-frame warm-up** — the PARLIO unit takes one `showPixels()` call to configure when the topology changes (number of outputs or LEDs-per-output).  The second call sends the first visible frame.
+
+---
+
 ## Compile-time Options
 
 Set these **before** `#include "I2SClocklessLedDriver.h"`:
 
 | Define | Default | Effect |
 |--------|---------|--------|
-| `FULL_DMA_BUFFER` | off | Enable full pre-transposed DMA buffer mode |
+| `FULL_DMA_BUFFER` | off | Enable full pre-transposed DMA buffer mode (ESP32/S3 only) |
 | `ENABLE_HARDWARE_SCROLL` | off | Enable `OffsetDisplay` hardware scrolling |
 | `USE_PIXELSLIB` | off | Use external PixelsLib types |
 | `HARDWARESPRITES 1` | 0 | Enable hardware sprite overlay |
@@ -325,3 +358,4 @@ Set these **before** `#include "I2SClocklessLedDriver.h"`:
 | `OVERCLOCK_1MHZ` | off | 1 MHz clock (S3 only) |
 | `OVERCLOCK_1_1MHZ` | off | 1.1 MHz clock (S3 only) |
 | `OVER_CLOCK_MAX` | off | ~1.12 MHz clock (S3 only) |
+| `PARLIO_AUTO_OVERCLOCK` | off | Adaptive clock scaling (P4 only) |

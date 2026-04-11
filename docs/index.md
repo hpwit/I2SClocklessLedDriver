@@ -8,7 +8,7 @@ Supported LED types:
 - **RGBW**: SK6812
 - **RGBCCT**: 5-channel tunable white
 
-Supported targets: **ESP32**, **ESP32-S3**, **ESP32-P4** (partial).
+Supported targets: **ESP32**, **ESP32-S3**, **ESP32-P4** (via the Parallel IO peripheral).
 
 ---
 

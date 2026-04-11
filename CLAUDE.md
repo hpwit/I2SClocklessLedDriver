@@ -33,7 +33,7 @@ There are no automated tests; validation is done by flashing and observing LED o
 |------|------|
 | `src/I2SClocklessLedDriver.h` | Main header — contains the full `I2SClocklessLedDriver` class and all static ISR/transpose functions. Nearly all implementation lives here. |
 | `src/I2SClocklessLedDriver.cpp` | Global variable definitions for `__NB_DMA_BUFFER` / `NUM_STRIPS`, plus `updateDriver()` and `deleteDriver()` implementations. |
-| `src/hardwareSprite.h/.cpp` | Optional hardware sprite overlay (enabled with `#define HARDWARESPRITES 1`). |
+| `src/HardwareSprite.h/.cpp` | Optional hardware sprite overlay (enabled with `#define HARDWARESPRITES 1`). |
 | `src/framebuffer.h` | Simple double-buffer helper (`frameBuffer` class). |
 | `src/helper.h` | Timing macros: `HOW_LONG`, `RUN_SKETCH_FOR`, `RUN_SKETCH_N_TIMES`. |
 | `src/pixeltypes.h` | Minimal `Pixel`/`Pixels` types used when `USE_PIXELSLIB` is not defined. |
@@ -61,7 +61,7 @@ Two modes:
 
 - `CONFIG_IDF_TARGET_ESP32S3` — uses LCD_CAM peripheral + GDMA. Main ISR path.
 - `CONFIG_IDF_TARGET_ESP32` — uses I2S0 peripheral + `esp_intr_alloc`. Different register layout.
-- `CONFIG_IDF_TARGET_ESP32P4` — referenced in platformio.ini but physical driver not yet implemented (only virtual driver path).
+- `CONFIG_IDF_TARGET_ESP32P4` — uses **PARLIO TX** peripheral (`src/parlio_p4.h/.cpp`). No I2S/DMA; the PARLIO unit is configured lazily on the first `showPixels()` call. `initled()` and `showPixels(WAIT)` are the supported entry points; `FULL_DMA_BUFFER`/`LOOP` modes are not available.
 
 ### Semaphores
 
