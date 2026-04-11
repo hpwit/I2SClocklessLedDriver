@@ -203,7 +203,7 @@ After Phase 5, the P4 block shrinks to the same logical shape as ESP32/S3.  The 
 ```cpp
 void showPixelsImpl() {
     guard checks (enableDriver, initSuccess, leds != NULL)
-#ifdef CONFIG_IDF_TARGET_ESP32P4
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_PARLIO_DRIVER
     loadAndTranspose()  // build waveform into active ping-pong buffer
     hwStart()           // swap buffers, chunk + transmit via PARLIO
     hwStop()            // wait for completion (synchronous on P4)

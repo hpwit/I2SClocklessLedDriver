@@ -72,7 +72,7 @@ In this example:
 
 - a branch called esp32-p4-support is added on the main branch
 - a few commits have been done
-- see [this PR](https://github.com/hpwit/I2SClocklessLedDriver/pull/54) : Coderabbit has done its reviews and additional commits are done
+- see [this PR](https://github.com/hpwit/I2SClocklessLedDriver/pull/54): CodeRabbit has done its reviews and additional commits are done
 
 ### Merging a PR
 

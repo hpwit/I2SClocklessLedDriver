@@ -33,7 +33,7 @@ There are no automated tests; validation is done by flashing and observing LED o
 |------|------|
 | `src/I2SClocklessLedDriver.h` | Main header — contains the full `I2SClocklessLedDriver` class and all static ISR/transpose functions. Nearly all implementation lives here. |
 | `src/I2SClocklessLedDriver.cpp` | Global variable definitions for `__NB_DMA_BUFFER` / `NUM_STRIPS`, plus `updateDriver()` and `deleteDriver()` implementations. |
-| `src/hardwareSprite.h/.cpp` | Optional hardware sprite overlay (enabled with `#define HARDWARESPRITES 1`). |
+| `src/HardwareSprite.h/.cpp` | Optional hardware sprite overlay (enabled with `#define HARDWARESPRITES 1`). |
 | `src/framebuffer.h` | Simple double-buffer helper (`frameBuffer` class). |
 | `src/helper.h` | Timing macros: `HOW_LONG`, `RUN_SKETCH_FOR`, `RUN_SKETCH_N_TIMES`. |
 | `src/pixeltypes.h` | Minimal `Pixel`/`Pixels` types used when `USE_PIXELSLIB` is not defined. |

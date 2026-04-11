@@ -17,7 +17,7 @@
 
 #pragma once
 
-#ifdef CONFIG_IDF_TARGET_ESP32P4
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_PARLIO_DRIVER
 
 #include "esp_timer.h"
 #include "esp_rom_sys.h"

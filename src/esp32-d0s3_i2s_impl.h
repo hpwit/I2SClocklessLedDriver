@@ -414,7 +414,7 @@ static void IRAM_ATTR loadAndTranspose(I2SClocklessLedDriver* driver)  // uint8_
   #endif
 #endif
       // Apply LUT tables + white extraction + channel reorder (Phase 9: unified method, called on all platforms)
-      uint8_t mapped[5] = {};  // temporary buffer holding mapped pixel in wire order (offsetRed/offsetGreen/offsetBlue/offsetWhite/offsetWhite2)
+      uint8_t mapped[driver->channelsPerLight] = {};  // temporary buffer holding mapped pixel in wire order (offsetRed/offsetGreen/offsetBlue/offsetWhite/offsetWhite2)
       driver->rgbwBufferMapping(poli, mapped);  // brightness/gamma LUT + white extraction + channel reorder
       // distribute mapped components into their respective colour channels
       for (int c = 0; c < driver->channelsPerLight; c++) secondPixel[c].bytes[i] = mapped[c];

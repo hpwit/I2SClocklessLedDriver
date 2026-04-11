@@ -23,7 +23,7 @@
 
 #include "freertos/FreeRTOS.h"  // #error "include FreeRTOS.h" must appear in source files before "include semphr.h"
 
-#ifdef CONFIG_IDF_TARGET_ESP32P4
+#if defined(CONFIG_IDF_TARGET_ESP32P4)
   // ESP32-P4 uses the PARLIO peripheral — no I2S/DMA headers needed.
   #include "esp_heap_caps.h"
   #include "esp_log.h"
@@ -382,12 +382,10 @@ class I2SClocklessLedDriver {
   // to locate each strip's data in the flat leds[] buffer without per-LED pointer arithmetic.
   uint32_t firstIndexPerOutput[MAX_PINS] = {};
 
-#ifdef CONFIG_IDF_TARGET_ESP32P4
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_PARLIO_DRIVER
   // PARLIO peripheral handle and configuration (only available in ESP-IDF v5.1+).
-  #if HAS_PARLIO_DRIVER
   parlio_tx_unit_handle_t p4TxUnit = NULL;
   parlio_tx_unit_config_t p4Config = {};
-  #endif
 
   // Ping-pong waveform buffers — allocated in initled(), freed in deleteDriver().
   uint16_t* p4Buffer1 = nullptr;
@@ -1326,6 +1324,10 @@ class I2SClocklessLedDriver {
       isDisplaying = false;
       return;
     }
+  #else
+    ESP_LOGE(TAG, "PARLIO driver unavailable — ESP-IDF v5.1+ required");
+    isDisplaying = false;
+    return;
   #endif
     if (loadAndTranspose()) {
       hwStart();
@@ -1431,9 +1433,7 @@ class I2SClocklessLedDriver {
   /** Validate that channelsPerLight and per-channel offsets describe a legal,
    *  non-overlapping wire layout that fits within the mapped[] array (size 5).
    *  Returns false and logs an error on any violation; true when valid. */
-  static bool validateChannelLayout(uint8_t channelsPerLight,
-                                    uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue,
-                                    uint8_t offsetWhite, uint8_t offsetWhite2) {
+  static bool validateChannelLayout(uint8_t channelsPerLight, uint8_t offsetRed, uint8_t offsetGreen, uint8_t offsetBlue, uint8_t offsetWhite, uint8_t offsetWhite2) {
     if (channelsPerLight < 3 || channelsPerLight > 5) {
       ESP_LOGE(TAG, "validateChannelLayout: channelsPerLight=%u must be 3-5", channelsPerLight);
       return false;
@@ -1590,7 +1590,7 @@ class I2SClocklessLedDriver {
 
       } */
 
-#ifdef CONFIG_IDF_TARGET_ESP32P4
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_PARLIO_DRIVER
   bool loadAndTranspose();
   void hwStart();
   void hwStop();

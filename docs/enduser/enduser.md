@@ -7,7 +7,7 @@ If upgrading from an older release, the following types were renamed:
 | Old name | New name | Notes |
 |---|---|---|
 | `frameBuffer` | `FrameBuffer` | Also exposes a new `valid()` method (see below) |
-| `hardwareSprite` | `HardwareSprite` | |
+| `HardwareSprite` | `HardwareSprite` | |
 | `leddirection` | `LedDirection` | Now an `enum class`; use `LedDirection::FORWARD`, `LedDirection::BACKWARD`, etc. |
 | `colorarrangment` | `ColorArrangement` | Typo fix |
 | `displayMode` (enum) | `DisplayMode` | Member variable and enum values (`NO_WAIT`, `WAIT`, `LOOP`) unchanged |
@@ -265,7 +265,7 @@ sprite.posY = 5;
 sprite.displaySprite = true;
 ```
 
-Each `hardwareSprite` writes into a pre-allocated segment of `_spritesleds[]`. A maximum of `NBSPRITE` sprites can be constructed.
+Each `HardwareSprite` writes into a pre-allocated segment of `_spritesleds[]`. A maximum of `NBSPRITE` sprites can be constructed.
 
 ---
 
