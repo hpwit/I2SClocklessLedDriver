@@ -417,30 +417,12 @@ void I2SClocklessLedDriver::initBuffers() {
     p4Config.flags.allow_pd = 0;
     p4Config.flags.invert_valid_out = 0;
 
-    if (p4TxUnit != NULL) {
-      esp_err_t err;
-      if ((err = parlio_tx_unit_wait_all_done(p4TxUnit, portMAX_DELAY)) != ESP_OK) ESP_LOGE(TAG, "initBuffers: parlio_tx_unit_wait_all_done failed: %s", esp_err_to_name(err));
-      if ((err = parlio_tx_unit_disable(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "initBuffers: parlio_tx_unit_disable failed: %s", esp_err_to_name(err));
-      if ((err = parlio_del_tx_unit(p4TxUnit)) != ESP_OK) ESP_LOGE(TAG, "initBuffers: parlio_del_tx_unit failed: %s", esp_err_to_name(err));
-      p4TxUnit = NULL;
-    }
+    // TX unit is created lazily on the first showPixels() call via
+    // ensureParlioTxUnitInitialized().  deleteBuffers() already tore down any
+    // previous unit before initBuffers() was called, so p4TxUnit is NULL here.
+    p4TxUnit = NULL;
 
-    esp_err_t err;
-    if ((err = parlio_new_tx_unit(&p4Config, &p4TxUnit)) != ESP_OK) {
-      ESP_LOGE(TAG, "initBuffers: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
-      p4TxUnit = NULL;
-      initErrorOccurred = true;
-      return;
-    }
-    if ((err = parlio_tx_unit_enable(p4TxUnit)) != ESP_OK) {
-      ESP_LOGE(TAG, "initBuffers: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
-      parlio_del_tx_unit(p4TxUnit);
-      p4TxUnit = NULL;
-      initErrorOccurred = true;
-      return;
-    }
-
-    ESP_LOGI(TAG, "PARLIO configured (%u outputs, %u LEDs/output)", (unsigned)outputs, (unsigned)max_leds);
+    ESP_LOGD(TAG, "PARLIO config prepared (%u outputs, %u LEDs/output) — TX unit deferred to first use", (unsigned)outputs, (unsigned)max_leds);
   }
   #endif
   return;  // P4 done

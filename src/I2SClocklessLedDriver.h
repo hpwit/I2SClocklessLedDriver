@@ -769,7 +769,8 @@ class I2SClocklessLedDriver {
     // esp_intr_disable((*dmaChan).intr);
     LCD_CAM.lcd_user.lcd_start = 0;
 #elif CONFIG_IDF_TARGET_ESP32P4
-    // P4: no semaphore setup needed (PARLIO setup happens in initBuffers())
+    // P4: no semaphore setup needed; PARLIO TX unit is created lazily by
+    // ensureParlioTxUnitInitialized() on the first showPixels() call.
     return;
 #endif
     // -- Create a semaphore to block execution until all the controllers are done
@@ -787,6 +788,35 @@ class I2SClocklessLedDriver {
   }
 
   // Transfer buffer allocation is in initBuffers() (I2SClocklessLedDriver.cpp)
+
+#if defined(CONFIG_IDF_TARGET_ESP32P4) && HAS_PARLIO_DRIVER
+  /** Create and enable the PARLIO TX unit using the configuration prepared by
+   *  initBuffers().  Called lazily from showPixelsImpl() before the first
+   *  transfer.  Returns true when the unit is ready, false on failure
+   *  (initErrorOccurred and initSuccess are set and an error is logged).
+   *  Idempotent: if p4TxUnit is already non-NULL it returns true immediately. */
+  bool ensureParlioTxUnitInitialized() {
+    if (p4TxUnit != NULL) return true;
+    esp_err_t err;
+    if ((err = parlio_new_tx_unit(&p4Config, &p4TxUnit)) != ESP_OK) {
+      ESP_LOGE(TAG, "ensureParlioTxUnitInitialized: parlio_new_tx_unit failed: %s", esp_err_to_name(err));
+      p4TxUnit = NULL;
+      initErrorOccurred = true;
+      initSuccess = false;
+      return false;
+    }
+    if ((err = parlio_tx_unit_enable(p4TxUnit)) != ESP_OK) {
+      ESP_LOGE(TAG, "ensureParlioTxUnitInitialized: parlio_tx_unit_enable failed: %s", esp_err_to_name(err));
+      parlio_del_tx_unit(p4TxUnit);
+      p4TxUnit = NULL;
+      initErrorOccurred = true;
+      initSuccess = false;
+      return false;
+    }
+    ESP_LOGI(TAG, "PARLIO TX unit initialized (%u outputs, %u LEDs/output)", (unsigned)numStrips, (unsigned)numLedPerStrip);
+    return true;
+  }
+#endif
 
 #ifdef FULL_DMA_BUFFER
 
@@ -1281,6 +1311,17 @@ class I2SClocklessLedDriver {
       isDisplaying = true;
     }
 #elif CONFIG_IDF_TARGET_ESP32P4
+  #if HAS_PARLIO_DRIVER
+    if (!ensureParlioTxUnitInitialized()) {
+      // TX unit could not be created — release any waiter and bail
+      if (wasWaitingtofinish && waitDisp != NULL) {
+        wasWaitingtofinish = false;
+        xSemaphoreGive(waitDisp);
+      }
+      isDisplaying = false;
+      return;
+    }
+  #endif
     if (loadAndTranspose()) {
       hwStart();
       hwStop();

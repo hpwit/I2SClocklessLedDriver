@@ -165,7 +165,9 @@ AI-generated code must be documented to the same standard as human-written code.
 Using AI assistance is fine. As the contributor, you are still responsible for the code:
 
 - **Understand it** — do not accept AI output because it "seems to work"
-- **Review changes to existing code** — AI edits can silently drop comments or break subtle logic; pay particular attention to ISR-path functions (`loadAndTranspose`, `hwStop`, `interruptHandler`)
+- **Review changes to existing code** — AI edits can silently drop comments or break subtle logic; ISR-path rules differ by platform:
+  - **ESP32 / S3**: `loadAndTranspose`, `hwStop`, and `interruptHandler` run in DMA ISR context and must carry `IRAM_ATTR` and use only ISR-safe APIs (`xSemaphoreGiveFromISR`, `portYIELD_FROM_ISR`); do not add blocking calls, heap allocation, or non-ISR-safe FreeRTOS primitives to these functions on these platforms
+  - **ESP32-P4**: `loadAndTranspose` and `hwStop` are called synchronously from `showPixelsImpl()` in ordinary task context (PARLIO path has no ISR); `IRAM_ATTR` is not required and standard task-level constraints apply; `interruptHandler` does not exist on P4
 - **Verify platform guards** — AI often forgets `#ifdef CONFIG_IDF_TARGET_*` when adding a new branch; always check that ESP32, S3, and P4 each compile
 
 Mark larger AI-generated sections with a comment:
@@ -276,14 +278,29 @@ patterns not obvious from source. Update in place — do not duplicate existing 
 > Complexity: high — needs full context  
 > Model: **Opus 4.6** / **Mistral Large**
 
-Prompt pattern:
+Prompt pattern — **ESP32 / S3** (DMA ISR hot path):
 ```text
-The ESP32 crashes with the following decoded stack trace:
+The ESP32/S3 crashes with the following decoded stack trace:
 [paste trace]
 The crash happens after [describe steps].
 Relevant files: [list files and line numbers].
 Identify the root cause and suggest a minimal fix.
-Constraint: the fix must not affect the ISR hot path performance.
+Constraint: the fix must not affect the ISR hot path performance —
+loadAndTranspose, hwStop, and interruptHandler run in DMA ISR context
+(IRAM_ATTR) and must use only ISR-safe APIs.
+```
+
+Prompt pattern — **ESP32-P4** (task context, no ISR hot path):
+```text
+The ESP32-P4 crashes with the following decoded stack trace:
+[paste trace]
+The crash happens after [describe steps].
+Relevant files: [list files and line numbers].
+Identify the root cause and suggest a minimal fix.
+Note: for ESP32-P4, PARLIO operates in task context — loadAndTranspose and
+hwStop are called synchronously from showPixelsImpl() with no ISR involvement;
+fixes may assume no ISR hot-path performance constraint and standard
+task-level APIs are safe to use.
 ```
 
 ---
