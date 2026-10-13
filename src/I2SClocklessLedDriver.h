@@ -1541,7 +1541,9 @@ putdefaultones((uint16_t *)dmaBuffersTampon[1]->buffer);
   }
 #endif
 
-  void IRAM_ATTR i2sReset() {
+  // An IRAM_ATTR in-class member keeps its literals outside IRAM with recent GCC ("dangerous relocation: l32r:
+  // literal placed after use"); always inlined, it lands in the section of each caller, i2sStop() in IRAM.
+  __attribute__((always_inline)) inline void i2sReset() {
 #ifdef CONFIG_IDF_TARGET_ESP32S3
     gdma_reset(dmaChan);
     LCD_CAM.lcd_misc.lcd_afifo_reset = 1;
